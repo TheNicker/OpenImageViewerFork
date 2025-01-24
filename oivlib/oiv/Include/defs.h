@@ -74,6 +74,8 @@ typedef wchar_t OIVCHAR;
         , RC_BadConversion
         , RC_ImageNotFound
         , RC_NotImplemented
+        , RC_InvalidState
+        , RC_OutOfRange
         , RC_UknownError = 0xFF
         , RC_InternalError = 0xFF + 1,
 
