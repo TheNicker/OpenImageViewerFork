@@ -5,73 +5,80 @@
 #include <any>
 #include <LLUtils/UniqueIDProvider.h>
 #include <mutex>
+#include <map>
 
 namespace OIV
 {
 
-using MessageType = uint32_t;
-using MessageCallBackType = std::function<void(Message)>;
+    using MessageType = uint32_t;
 
-struct Message
-{
-    MessageType type;
-    size_t size;
-    std::any data;
-};
+    struct Message
+    {
+        MessageType type;
+        size_t size;
+        std::any data;
+    };
 
-using MessagesType = std::list<Message>;
+    using MessageCallBackType = std::function<void(Message)>;
 
-class AppMessageManager
-{
+    using MessagesType = std::list<Message>;
+
+    class AppMessageManager
+    {
     public:
-    AppMessageManager()
-    {
-        fEventHandle = CreateEvent(NULL, FALSE, FALSE, NULL);
-    }
-
-    /// @brief register a message handler
-    /// @param  
-    /// @return 
-    MessageType AddMessageHandler(MessageCallBackType)
-    {
-        fIDProvider.Acquire();
-    }
-   
-   void QueueMessage(MessageType type,size_t size, std::any data)
-   {
-    MessagesType messagesToFlush;
+        AppMessageManager()
         {
-            std::swap(messagesToFlush, fMessages);
+            fEventHandle = CreateEvent(NULL, FALSE, FALSE, NULL);
         }
 
-        for (auto& message : messagesToFlush)
+        /// @brief register a message handler
+        /// @param
+        /// @return
+        MessageType AddMessageHandler(MessageCallBackType callback)
         {
-            fMessageCallBack(message.type, message.size, message.data);
+            auto messageType = fIDProvider.Acquire();
+            fMessageHandlers.emplace(messageType, callback);
+            return messageType;
         }
-    std::lock_guard<std::mutex> lock(fMessageSyncMutex);
 
-   }
-
-   void SetEvent()
-   {
-        ::SetEvent(fEventHandle);
-   }
-
-
-   void HandleEvents()
-   {
-        DWORD result = MsgWaitForMultipleObjectsEx(1, &fEventHandle, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE);
-        if (result == WAIT_OBJECT_0)
-        { 
-            //flush queued messages at the desired thread
-            
-            ::ResetEvent(fEventHandle);
+        void QueueMessage(MessageType type, size_t size, std::any data)
+        {
+            {
+                std::lock_guard<std::mutex> lock(fMessageSyncMutex);
+                fMessages.emplace_back(type, size, data);
+            }
         }
-   }
-    HANDLE fEventHandle{};
-    LLUtils::UniqueIdProvider <MessageType> fIDProvider;
-    std::mutex fMessageSyncMutex;
-    std::list<Message> fMessages;
- };
- 
+
+        void SetEvent()
+        {
+            ::SetEvent(fEventHandle);
+        }
+
+        void HandleEvents()
+        {
+            DWORD result = MsgWaitForMultipleObjectsEx(1, &fEventHandle, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE);
+            if (result == WAIT_OBJECT_0)
+            {
+                MessagesType messagesToFlush;
+                {
+                    std::lock_guard<std::mutex> lock(fMessageSyncMutex);
+                    std::swap(messagesToFlush, fMessages);
+                }
+
+                // flush queued messages at the desired thread
+                for (auto &message : messagesToFlush)
+                {
+                    auto it = fMessageHandlers.find(message.type);
+                    it->second(message);
+                }
+                ::ResetEvent(fEventHandle);
+            }
+        }
+        HANDLE fEventHandle{};
+        LLUtils::UniqueIdProvider<MessageType> fIDProvider;
+        std::mutex fMessageSyncMutex;
+        std::list<Message> fMessages;
+        std::map<MessageType, MessageCallBackType> fMessageHandlers;
+    };
+
 }

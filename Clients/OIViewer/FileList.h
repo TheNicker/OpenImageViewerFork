@@ -20,7 +20,7 @@ namespace OIV
 		static constexpr auto IndexEnd = std::numeric_limits<index_type>::max();
 		static constexpr auto IndexStart = std::numeric_limits<index_type>::min();
 
-		FileList()
+		FileList( )
 		{
 			fFileWatcher.FileChangedEvent.Add(std::bind(&FileList::OnFileChanged, this, std::placeholders::_1));
 		}
