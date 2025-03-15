@@ -10,4 +10,10 @@ namespace OIV
         LoadFileExternally,
         CountColors
     };
-}
+
+    struct CountColorsData
+    {
+        void* image;
+        int64_t colorCount;
+    };
+}  // namespace OIV
