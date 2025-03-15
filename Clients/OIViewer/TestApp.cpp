@@ -2996,56 +2996,59 @@ namespace OIV
         }
     }
 
-    bool TestApp::JumpFiles(FileIndexType step)
+    bool TestApp::JumpFiles(FileList::index_type step)
     {
-        if (fListFiles.empty())
-            return false;
-
-        FileCountType totalFiles = fListFiles.size();
-        FileIndexType fileIndex = fCurrentFileIndex;
-
-        int sign;
-        if (step == FileIndexEnd)
-        {
-            // Last
-            fileIndex = static_cast<int32_t>(fListFiles.size());
-            sign = -1;
-        }
-        else if (step == FileIndexStart)
-        {
-            // first
-            fileIndex = -1;
-            sign = 1;
-        }
-        else
-        {
-            sign = step > 0 ? 1 : -1;
-        }
-
-        bool isLoaded = false;
-        LLUtils::ListWStringIterator it;
-
-        do
-        {
-            fileIndex += sign;
-
-            if (fileIndex < 0 || fileIndex >= static_cast<FileIndexType>(totalFiles) || fileIndex == fCurrentFileIndex)
-                break;
-
-            it = fListFiles.begin();
-            std::advance(it, fileIndex);
-        }
-
-        while ((isLoaded = LoadFile(*it, IMCodec::PluginTraverseMode::AnyPlugin |
-                                             IMCodec::PluginTraverseMode::OnlyKnownFileType)) == false);
-
-        if (isLoaded)
-        {
-            assert(fileIndex >= 0 && fileIndex < static_cast<FileIndexType>(totalFiles));
-            fCurrentFileIndex = fileIndex;
-        }
-        return isLoaded;
+        return fFileList.JumpDelta(step) == ResultCode::RC_Success;
     }
+
+    // Old Jump files implementation
+    //     if (fListFiles.empty())
+    //     return false;
+
+    // FileCountType totalFiles = fListFiles.size();
+    // FileIndexType fileIndex = fCurrentFileIndex;
+
+    // int sign;
+    // if (step == FileIndexEnd)
+    // {
+    //     // Last
+    //     fileIndex = static_cast<int32_t>(fListFiles.size());
+    //     sign = -1;
+    // }
+    // else if (step == FileIndexStart)
+    // {
+    //     // first
+    //     fileIndex = -1;
+    //     sign = 1;
+    // }
+    // else
+    // {
+    //     sign = step > 0 ? 1 : -1;
+    // }
+
+    // bool isLoaded = false;
+    // LLUtils::ListWStringIterator it;
+
+    // do
+    // {
+    //     fileIndex += sign;
+
+    //     if (fileIndex < 0 || fileIndex >= static_cast<FileIndexType>(totalFiles) || fileIndex == fCurrentFileIndex)
+    //         break;
+
+    //     it = fListFiles.begin();
+    //     std::advance(it, fileIndex);
+    // }
+
+    // while ((isLoaded = LoadFile(*it, IMCodec::PluginTraverseMode::AnyPlugin |
+    //                                      IMCodec::PluginTraverseMode::OnlyKnownFileType)) == false);
+
+    // if (isLoaded)
+    // {
+    //     assert(fileIndex >= 0 && fileIndex < static_cast<FileIndexType>(totalFiles));
+    //     fCurrentFileIndex = fileIndex;
+    // }
+    // return isLoaded;
 
     void TestApp::ToggleFullScreen(bool multiFullScreen)
     {
@@ -4115,28 +4118,12 @@ namespace OIV
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex cannot be closed.");
     }
 
-    LLUtils::ListWString TestApp::GetSupportedFileListInFolder(const std::wstring& folderPath)
-    {
-        LLUtils::ListWString fileList;
-        if (std::filesystem::is_directory(folderPath))
-        {
-            LLUtils::FileSystemHelper::FindFiles(fileList, folderPath, fKnownFileTypes, false, false);
-            std::sort(fileList.begin(), fileList.end(), fFileSorter);
-        }
-        else
-        {
-            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Not a folder");
-        }
-
-        return fileList;
-    }
-
     bool TestApp::LoadFileOrFolder(const std::wstring& filePath, IMCodec::PluginTraverseMode traverseMode)
     {
         bool success = false;
         if (std::filesystem::is_directory(filePath))
         {
-            auto fileList = GetSupportedFileListInFolder(filePath);
+            auto fileList = FileList::GetSupportedFileListInFolder(filePath);
             size_t i;
             std::shared_ptr<OIVFileImage> file;
             ResultCode result = ResultCode::RC_NotInitialized;
