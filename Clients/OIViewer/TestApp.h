@@ -20,7 +20,7 @@
 #include "RecursiveDelayOp.h"
 #include "AdaptiveMotion.h"
 #include "CommandManager.h"
-#include "FileSorter.h"
+#include "FileMangement/FileSorter.h"
 
 #include <LInput/Keys/KeyBindings.h>
 #include <LInput/Buttons/ButtonStates.h>
@@ -38,7 +38,7 @@
 #include "ImageState.h"
 #include "AppMessageManager.h"
 #include "ContextMenu.h"
-#include "FileWatcher.h"
+#include "FileMangement/FileWatcher.h"
 
 #include "MouseMultiClickHandler.h"
 #include "UI/MessageManager.h"
@@ -48,7 +48,7 @@
 #include <ImageCodec.h>
 #include "win32/EventSync.h"
 #include "InterThreadMessages.h"
-#include "FileList.h"
+#include "FileMangement/FileList.h"
 
 namespace OIV
 {
@@ -135,7 +135,7 @@ namespace OIV
         }
     };
 
-    class TestApp
+    class TestApp : public IFileListProvider
     {
       public:
 
@@ -507,5 +507,11 @@ namespace OIV
         FileSorter fFileSorter;
         EventSync fEventSync;
         FileList fFileList;
+        // FileListProvider
+        virtual FileWatcher* GetFileWatcher() override;
+        virtual FileSorter* GetFileSorter() override;
+        virtual FileListStringSetType* GetknownFileTypesSet() override;
+        virtual FileListStringType GetActiveFileName() override;
+        virtual FileListStringType GetknownFileTypes() override;
     };
 }  // namespace OIV

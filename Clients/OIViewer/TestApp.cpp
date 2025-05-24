@@ -4350,4 +4350,29 @@ namespace OIV
         }
     }
 
+    // IFileListWatcher
+
+    FileWatcher* TestApp::GetFileWatcher()
+    {
+        return &fFileWatcher;
+    }
+
+    FileSorter* TestApp::GetFileSorter()
+    {
+        return &fFileSorter;
+    }
+
+    FileListStringSetType* TestApp::GetknownFileTypesSet()
+    {
+        return &fKnownFileTypesSet;
+    }
+    FileListStringType TestApp::GetActiveFileName()
+    {
+        return GetOpenedFileName();
+    }
+    FileListStringType TestApp::GetknownFileTypes()
+    {
+        return fKnownFileTypes;
+    }
+
 }  // namespace OIV
