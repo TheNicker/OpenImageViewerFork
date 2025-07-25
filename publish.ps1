@@ -122,7 +122,7 @@ $fileContent = Get-Content -Path $PSScriptRoot/$VersionPath
 
 $major=GetVersionNumber $fileContent  "OIV_VERSION_MAJOR"
 $minor=GetVersionNumber $fileContent "OIV_VERSION_MINOR"
-$revision=GetVersionNumber $fileContent "OIV_VERSION_REVISION"
+$revision=$(git rev-list HEAD --count)
 
 
 $versionString = "${major}.${minor}.$revision.$OIV_RELEASE_SUFFIX$OIV_VERSION_BUILD"
