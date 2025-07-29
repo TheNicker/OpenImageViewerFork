@@ -1,18 +1,4 @@
-// Microsoft Visual C++ generated resource script.
-//
 #include "resource.h"
-#include "winuser.h"
-
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// Generated from the TEXTINCLUDE 2 resource.
-//
-#include "winres.h"
-/////////////////////////////////////////////////////////////////////////////
-//
-// Icon
-//
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
