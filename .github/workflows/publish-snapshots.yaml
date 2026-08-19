@@ -80,7 +80,7 @@ jobs:
     runs-on: windows-2025-vs2026
     timeout-minutes: 90
     concurrency:
-      group: package-snapshots-snapshot
+      group: package-snapshots-${{ needs.gate.outputs.publish_sha }}
       cancel-in-progress: false
 
     steps:
@@ -117,11 +117,12 @@ jobs:
       actions: read
       contents: write
     concurrency:
-      group: publish-snapshots-snapshot
+      group: publish-snapshots-${{ needs.gate.outputs.publish_sha }}
       cancel-in-progress: false
     env:
       RELEASE_REPOSITORY: ${{ github.event.repository.fork && github.repository || format('{0}/snapshots', github.repository_owner) }}
-      RELEASE_TAG: snapshot
+      RELEASE_TAG: snapshot-${{ needs.gate.outputs.publish_sha }}
+      RELEASE_TARGET: ${{ github.event.repository.fork && needs.gate.outputs.publish_sha || '' }}
       PUBLISH_SHA: ${{ needs.gate.outputs.publish_sha }}
 
     steps:
@@ -197,15 +198,23 @@ jobs:
           }
 
           if (-not $releaseExists) {
-              gh release create $env:RELEASE_TAG `
-                  --repo $env:RELEASE_REPOSITORY `
-                  --title $env:RELEASE_TITLE `
-                  --notes $notes
+              $createArgs = @(
+                  "release", "create", $env:RELEASE_TAG,
+                  "--repo", $env:RELEASE_REPOSITORY,
+                  "--title", $env:RELEASE_TITLE,
+                  "--notes", $notes,
+                  "--prerelease"
+              )
+              if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TARGET)) {
+                  $createArgs += @("--target", $env:RELEASE_TARGET)
+              }
+              gh @createArgs
           } else {
               gh release edit $env:RELEASE_TAG `
                   --repo $env:RELEASE_REPOSITORY `
                   --title $env:RELEASE_TITLE `
-                  --notes $notes
+                  --notes $notes `
+                  --prerelease
 
               $release = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json assets | ConvertFrom-Json
               foreach ($asset in @($release.assets)) {
