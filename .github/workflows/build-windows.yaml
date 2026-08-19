@@ -18,14 +18,9 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
-
-    - name: Configure Git Safe Directories
-      run: |
-        git config --global --add safe.directory '*'
-
-    - name: Git update submodules
-      run: |
-        git submodule update --init --recursive --depth 1
+      with:
+        fetch-depth: 1
+        submodules: recursive
 
     - name: Configure CMake
       run: >
@@ -49,10 +44,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
-    - name: Git update submodules
-      run: |
-        git submodule update --init --recursive --depth 1
+      with:
+        fetch-depth: 1
+        submodules: recursive
 
     - name: Configure CMake
       run: >

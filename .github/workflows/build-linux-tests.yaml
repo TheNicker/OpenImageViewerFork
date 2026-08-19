@@ -26,6 +26,9 @@ jobs:
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        submodules: recursive
 
     - name: Show tool versions
       run: |
@@ -39,14 +42,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y lld
-
-    - name: Configure Git Safe Directories
-      run: |
-        git config --global --add safe.directory '*'
-
-    - name: Git update submodules
-      run: |
-        git submodule update --init --recursive --depth 1
 
     - name: Configure CMake
       run: >
