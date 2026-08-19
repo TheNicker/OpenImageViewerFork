@@ -168,10 +168,8 @@ include_directories(./Extensions)
 
 add_subdirectory(./External/LLUtils)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    option(WIN32_LIB_BUILD_SAMPLES "build win32 samples" OFF)
-    add_subdirectory(./External/Win32)
-endif()
+set(LWS_BUILD_TESTS OFF CACHE BOOL "Build LWS tests" FORCE)
+add_subdirectory(./External/LWS)
 
     add_subdirectory(OIVShared)
 

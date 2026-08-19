@@ -1,3 +1,4 @@
+#include <array>
 #include <iomanip>
 #include <filesystem>
 #include <thread>
@@ -11,10 +12,6 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -147,23 +144,21 @@ namespace OIV
 
         // Create 32 bit BGRA color image
 
-        ::Win32::BitmapBuffer bitmapBuffer{};
+        LWS::BitmapBuffer bitmapBuffer{};
         bitmapBuffer.bitsPerPixel = bgraImage->GetBitsPerTexel();
         bitmapBuffer.rowPitch     = LLUtils::Utility::Align<uint32_t>(bgraImage->GetRowPitchInBytes(), sizeof(DWORD));
         LLUtils::Buffer colorBuffer(bgraImage->GetHeight() * bitmapBuffer.rowPitch);
-        bitmapBuffer.buffer = colorBuffer.data();
         bitmapBuffer.height = bgraImage->GetHeight();
         bitmapBuffer.width  = bgraImage->GetWidth();
 
         // Create 24 bit mask image.
-        ::Win32::BitmapBuffer maskBuffer{};
+        LWS::BitmapBuffer maskBuffer{};
         maskBuffer.bitsPerPixel = 24;
         maskBuffer.height       = bgraImage->GetHeight();
         maskBuffer.width        = bgraImage->GetWidth();
         maskBuffer.rowPitch = LLUtils::Utility::Align<uint32_t>(maskBuffer.width * maskBuffer.bitsPerPixel / CHAR_BIT,
                                                                 sizeof(DWORD));
         LLUtils::Buffer maskPixelsBuffer(maskBuffer.height * maskBuffer.rowPitch);
-        maskBuffer.buffer = maskPixelsBuffer.data();
 
 #pragma pack(push, 1)
 
@@ -213,13 +208,16 @@ namespace OIV
             }
         }
 
+        bitmapBuffer.pixels = std::span<const std::byte>(colorBuffer.data(), colorBuffer.size());
+        maskBuffer.pixels = std::span<const std::byte>(maskPixelsBuffer.data(), maskPixelsBuffer.size());
+
         LLUtils::native_stringstream ss;
         ss << imageSlot + 1 << L'/' << totalImages << LLUTILS_TEXT("  ") << bitmapBuffer.width << LLUTILS_TEXT(" x ") << bitmapBuffer.height
            << LLUTILS_TEXT(" x ") << bitmapBuffer.bitsPerPixel << LLUTILS_TEXT(" BPP");
 
         fWindow.GetImageControl().GetImageList().SetImage(
-            {imageSlot, ss.str(), std::make_shared<::Win32::BitmapSharedPtr::element_type>(bitmapBuffer),
-             std::make_shared<::Win32::BitmapSharedPtr::element_type>(maskBuffer)});
+            {imageSlot, ss.str(), std::make_shared<LWS::Bitmap>(bitmapBuffer),
+             std::make_shared<LWS::Bitmap>(maskBuffer)});
     }
 
     bool ViewerApplication::IsSubImagesVisible() const
@@ -279,7 +277,7 @@ namespace OIV
     {
         const auto clientSize = fWindow.GetClientSize();
         return ProcessImageLoadResult(fImageOpenController->LoadFile(
-            filePath, loaderFlags, ImageLoadContext{static_cast<int>(clientSize.cx), static_cast<int>(clientSize.cy)}));
+            filePath, loaderFlags, ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
     }
 
     bool ViewerApplication::ProcessImageLoadResult(const ImageLoadResult& loadResult)
@@ -771,8 +769,7 @@ namespace OIV
                 textImage->SetVisible(true);
                 textImage->SetOpacity(1.0);
 
-                textImage->SetDPI(fCurrentMonitorProperties.DPIx, fCurrentMonitorProperties.DPIy);
-                textImage->SetDPI(fCurrentMonitorProperties.DPIx, fCurrentMonitorProperties.DPIy);
+                textImage->SetDPI(fCurrentMonitorProperties.dpiX, fCurrentMonitorProperties.dpiY);
                 textImage->SetFontPath(LabelManager::sFontPath);
                 textImage->SetFontSize(10);
                 textImage->SetOutlineWidth(0);
@@ -796,23 +793,22 @@ namespace OIV
             image, IMCodec::TexelFormat::I_B8_G8_R8_A8, false);
         if (clipboardCompatibleImage != nullptr)
         {
-            uint32_t width  = clipboardCompatibleImage->GetWidth();
-            uint32_t height = clipboardCompatibleImage->GetHeight();
-            uint8_t bpp     = clipboardCompatibleImage->GetBitsPerTexel();
-            auto dibBUffer  = LLUtils::PlatformUtility::CreateDIB<1>(width, height, bpp,
-                                                                     clipboardCompatibleImage->GetRowPitchInBytes(),
-                                                                     clipboardCompatibleImage->GetBuffer());
-            auto result     = fClipboardHelper.SetClipboardData(CF_DIB, dibBUffer);
+            uint32_t width   = clipboardCompatibleImage->GetWidth();
+            uint32_t height  = clipboardCompatibleImage->GetHeight();
+            uint8_t bpp      = clipboardCompatibleImage->GetBitsPerTexel();
+            auto dibBuffer   = LLUtils::PlatformUtility::CreateDIB<1>(width, height, bpp,
+                                                                      clipboardCompatibleImage->GetRowPitchInBytes(),
+                                                                      clipboardCompatibleImage->GetBuffer());
+            auto dibV5Buffer = LLUtils::PlatformUtility::CreateDIB<5>(width, height, bpp,
+                                                                      clipboardCompatibleImage->GetRowPitchInBytes(),
+                                                                      clipboardCompatibleImage->GetBuffer());
+            const std::array clipboardData{
+                LWS::ClipboardDataView{.format = CF_DIB, .data = {dibBuffer.data(), dibBuffer.size()}},
+                LWS::ClipboardDataView{.format = CF_DIBV5, .data = {dibV5Buffer.data(), dibV5Buffer.size()}},
+            };
+            const auto result = fClipboardHelper.SetClipboardData(fWindow.GetHandle(), clipboardData);
 
-            if (result == ::Win32::ClipboardResult::Success)
-            {
-                auto dibV5BUffer = LLUtils::PlatformUtility::CreateDIB<5>(
-                    width, height, bpp, clipboardCompatibleImage->GetRowPitchInBytes(),
-                    clipboardCompatibleImage->GetBuffer());
-                result = fClipboardHelper.SetClipboardData(CF_DIBV5, dibV5BUffer);
-            }
-
-            if (result == ::Win32::ClipboardResult::Success)
+            if (result == LWS::ClipboardResult::Success)
                 return true;
         }
         return false;
@@ -928,7 +924,8 @@ namespace OIV
         if (action == ReloadAction::AskUser)
         {
             using namespace std::string_literals;
-            int mbResult = MessageBox(fWindow.GetHandle(), (LLUTILS_TEXT("Reload the file: "s) + requestedFile).c_str(),
+            int mbResult = MessageBox(reinterpret_cast<HWND>(fWindow.GetHandle()),
+                                      (LLUTILS_TEXT("Reload the file: "s) + requestedFile).c_str(),
                                       LLUTILS_TEXT("File is changed outside of OIV"), MB_YESNO);
             action = fFileReloadPolicy.ConfirmReload(mbResult == IDYES);
         }
@@ -948,7 +945,7 @@ namespace OIV
         const auto clientSize = fWindow.GetClientSize();
         return ProcessImageLoadResult(fImageOpenController->LoadFileOrFolder(
             filePath, traverseMode,
-            ImageLoadContext{static_cast<int>(clientSize.cx), static_cast<int>(clientSize.cy)}));
+            ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
     }
 
     void ViewerApplication::CountColorsAsync()

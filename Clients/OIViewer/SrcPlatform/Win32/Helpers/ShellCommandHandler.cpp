@@ -4,9 +4,9 @@
 
 #include <Windows.h>
 
+#include <LWS/Platform.hpp>
 #include <LLUtils/PlatformUtility.h>
 #include <LLUtils/StringUtility.h>
-#include <Win32/Win32Helper.h>
 
 #include <limits>
 #include <sstream>
@@ -60,7 +60,7 @@ namespace OIV
         else if (command == "containingFolder")
         {
             if (openedFileName.empty() == false)
-                ::Win32::Win32Helper::BrowseToFile(openedFileName);
+                LWS::Platform::browseToFile(openedFileName);
         }
         else if (command == "openWith")
         {

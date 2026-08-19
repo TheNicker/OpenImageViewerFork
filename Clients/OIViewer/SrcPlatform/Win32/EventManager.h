@@ -1,7 +1,7 @@
 #pragma once
 #include <LLUtils/Event.h>
 #include <LLUtils/Singleton.h>
-#include <Win32/MonitorInfo.h>
+#include <LWS/Platform.hpp>
 
 namespace OIV
 {
@@ -11,7 +11,7 @@ namespace OIV
 
         struct MonitorChangeEventParams
         {
-            ::Win32::MonitorDesc monitorDesc;
+            LWS::Platform::MonitorDesc monitorDesc;
         };
 
         using MonitorChangeEvent = LLUtils::Event<void(const MonitorChangeEventParams&)>;

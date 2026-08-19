@@ -1,5 +1,6 @@
 #pragma once
-#include "Win32/MonitorInfo.h"
+#include <LWS/Platform.hpp>
+#include <Windows.h>
 
 namespace OIV
 {
@@ -9,10 +10,10 @@ namespace OIV
         void UpdateFromWindowHandle(HWND hwnd)
         {
             HMONITOR hmonitor = MonitorFromWindow(hwnd, 0);
-            if (hmonitor != fMonitorDesc.handle) // update frame rate only if monitor has changed.
+            if (reinterpret_cast<LWS::Handle>(hmonitor) != fMonitorDesc.handle) // update frame rate only if monitor has changed.
             {
-                ::Win32::MonitorInfo::GetSingleton().Refresh(); // refresh in case monitors were added or removed since last refresh.
-                fMonitorDesc = ::Win32::MonitorInfo::GetSingleton().getMonitorInfo(hmonitor);
+                LWS::Platform::refreshMonitors(); // refresh in case monitors were added or removed since last refresh.
+                fMonitorDesc = LWS::Platform::getMonitorInfo(reinterpret_cast<LWS::Handle>(hmonitor));
                 //fMonitorProvider.SetCurrentMonitor(MonitorInfo::GetSingleton().getMonitorInfo(hmonitor));
 
                 EventManager::MonitorChangeEventParams params = { fMonitorDesc };
@@ -21,6 +22,6 @@ namespace OIV
         }
 
     private:
-        ::Win32::MonitorDesc fMonitorDesc{};
+        LWS::Platform::MonitorDesc fMonitorDesc{};
     };
 }

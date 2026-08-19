@@ -11,10 +11,7 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
+#include <LWS/Platform.hpp>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -112,11 +109,10 @@ namespace OIV
 
         if (btnEvent.button == MouseButton::Left && btnEvent.eventType == EventType::Released)
         {
-            fWindow.SetLockMouseToWindowMode(::Win32::LockMouseToWindowMode::NoLock);
+            fWindow.SetLockMouseToWindowMode(LWS::LockMouseToWindowMode::NoLock);
         }
 
-        using namespace ::Win32;
-        LockMouseToWindowMode lockMode = LockMouseToWindowMode::NoLock;
+        LWS::LockMouseToWindowMode lockMode = LWS::LockMouseToWindowMode::NoLock;
         const auto& mouseState = fMouseDevicesState.find(btnEvent.parent->GetID())->second;
         const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
         const bool IsLeftDown = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
@@ -135,22 +131,22 @@ namespace OIV
             else if (IsRightDown == false && IsRightCatured == false)
             {
                 // Window drag and resize
-                if (Win32Helper::IsKeyPressed(VK_MENU) == false && fWindow.IsFullScreen() == false)
+                if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) == false && fWindow.IsFullScreen() == false)
                 {
-                    if (Win32Helper::IsKeyPressed(VK_CONTROL) == true)
-                        lockMode = LockMouseToWindowMode::LockResize;
+                    if (LWS::Platform::isKeyPressed(LWS::KeyCode::Control) == true)
+                        lockMode = LWS::LockMouseToWindowMode::LockResize;
                     else
-                        lockMode = LockMouseToWindowMode::LockMove;
+                        lockMode = LWS::LockMouseToWindowMode::LockMove;
                 }
             }
             if (btnEvent.eventType == EventType::Released)
             {
-                lockMode = LockMouseToWindowMode::NoLock;
+                lockMode = LWS::LockMouseToWindowMode::NoLock;
             }
 
             fWindow.SetLockMouseToWindowMode(lockMode);
 
-            if (Win32Helper::IsKeyPressed(VK_MENU))
+            if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
             {
                 SelectionRect::Operation op = SelectionRect::Operation::NoOp;
                 if (btnEvent.eventType == EventType::Pressed && fWindow.IsUnderMouseCursor())
@@ -190,7 +186,7 @@ namespace OIV
             if (fContextMenuTimer.GetInterval() == 0 && fRockerGestureActivate == false)
             {
                 fContextMenuTimer.SetInterval(500);
-                fDownPosition = ::Win32::Win32Helper::GetMouseCursorPosition();
+                fDownPosition = LWS::Platform::getMousePosition();
             }
         }
     }
@@ -198,8 +194,6 @@ namespace OIV
     void ViewerApplication::OnMouseInput(const LInput::RawInput::RawInputEventMouse& mouseInput)
     {
         using namespace LInput;
-        using namespace ::Win32;
-
         const auto& mouseState = fMouseDevicesState.find(mouseInput.deviceIndex)->second;
 
         // const bool IsLeftDown = mouseState.GetButtonState(MouseState::Button::Left) == MouseState::State::Down;
@@ -222,7 +216,7 @@ namespace OIV
         // mouseState.GetButtonState(MouseButtonType::Forward) == ButtonState::Up;
 
         // Selection rect
-        if (Win32Helper::IsKeyPressed(VK_MENU))
+        if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
         {
             if (IsLeftCaptured)
             {
@@ -243,17 +237,17 @@ namespace OIV
         if (wheelDelta != 0)
         {
             // Browse files
-            if (isMouseUnderCursor && Win32Helper::IsKeyPressed(VK_MENU))
+            if (isMouseUnderCursor && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
             {
                 ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousSubImage" : "NextSubImage");
             }
-            else if (isMouseUnderCursor && Win32Helper::IsKeyPressed(VK_SHIFT))
+            else if (isMouseUnderCursor && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
             {
                 ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousImageInFolder" : "NextImageInFolder");
             }
             else if (IsRightCatured || isMouseUnderCursor)
             {
-                POINT mousePos = fWindow.GetMousePosition();
+                auto mousePos = fWindow.GetMousePosition();
                 // 20% percent zoom in each wheel step
                 if (IsRightCatured)
                     //  Zoom to center of the client area if currently panning.
@@ -265,7 +259,7 @@ namespace OIV
 
         if (IsRightDown)
         {
-            LLUtils::PointI32 currentPosition = Win32Helper::GetMouseCursorPosition();
+            LLUtils::PointI32 currentPosition = LWS::Platform::getMousePosition();
             if (currentPosition.DistanceSquared(fDownPosition) > 25)
                 fContextMenuTimer.SetInterval(0);
         }
@@ -342,7 +336,7 @@ namespace OIV
                     }
                     else
                     {
-                        ToggleFullScreen(::Win32::Win32Helper::IsKeyPressed(VK_MENU) ? true : false);
+                        ToggleFullScreen(LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) ? true : false);
                     }
                 }
             }
@@ -357,10 +351,10 @@ namespace OIV
         }
     }
 
-    bool ViewerApplication::handleKeyInput(const ::Win32::EventWinMessage* evnt)
+    bool ViewerApplication::handleKeyInput(const LWS::Win32::WinMessage& message)
     {
         LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
-            static_cast<uint32_t>(evnt->message.wParam), static_cast<uint32_t>(evnt->message.lParam));
+            static_cast<uint32_t>(message.wParam), static_cast<uint32_t>(message.lParam));
         LInput::KeyBindings<BindingElement>::ConcreteBindingType bindings;
         bool result = true;
         if (result == fKeyBindings.GetBinding(keyCombination, bindings))
@@ -372,14 +366,14 @@ namespace OIV
         return result;
     }
 
-    LRESULT ViewerApplication::ClientWindwMessage(const ::Win32::Event* evnt1)
+    LRESULT ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
-        using namespace ::Win32;
-        const EventWinMessage* evnt = dynamic_cast<const EventWinMessage*>(evnt1);
-        if (evnt == nullptr)
+        const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
+        if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
+            raw->platformData == nullptr)
             return 0;
 
-        const WinMessage& message = evnt->message;
+        const LWS::Win32::WinMessage& message = *reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
 
         LRESULT retValue = 0;
         switch (message.message)
@@ -438,17 +432,16 @@ namespace OIV
         }
     }
 
-    bool ViewerApplication::HandleWinMessageEvent(const ::Win32::EventWinMessage* evnt)
+    bool ViewerApplication::HandleWinMessageEvent(const LWS::Win32::WinMessage& uMsg)
     {
         bool handled = false;
 
-        const ::Win32::WinMessage& uMsg = evnt->message;
         switch (uMsg.message)
         {
             case WM_SHOWWINDOW:
                 if (fIsFirstFrameDisplayed == false && uMsg.wParam == TRUE)
                 {
-                    PostMessage(fWindow.GetHandle(), Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
+                    PostMessage(reinterpret_cast<HWND>(fWindow.GetHandle()), Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
                     fIsFirstFrameDisplayed = true;
                 }
                 break;
@@ -480,7 +473,7 @@ namespace OIV
             {
                 using namespace LInput;
                 KeyCombination keyCombination = KeyCombination::FromVirtualKey(
-                    static_cast<uint32_t>(evnt->message.wParam), static_cast<uint32_t>(evnt->message.lParam));
+                    static_cast<uint32_t>(uMsg.wParam), static_cast<uint32_t>(uMsg.lParam));
 
                 bool isAltup = (keyCombination.keydata().keycode == KeyCode::LALT ||
                                 keyCombination.keydata().keycode == KeyCode::RIGHTALT ||
@@ -492,7 +485,7 @@ namespace OIV
             break;
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
-                handled = handleKeyInput(evnt);
+                handled = handleKeyInput(uMsg);
                 break;
 
             case WM_MOUSEMOVE:
@@ -548,10 +541,10 @@ namespace OIV
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex cannot be closed.");
     }
 
-    bool ViewerApplication::HandleFileDragDropEvent(const ::Win32::EventDdragDropFile* event_ddrag_drop_file)
+    bool ViewerApplication::HandleFileDragDropEvent(const LWS::EventDragDropFile& eventDragDropFile)
     {
         LLUtils::native_string_type normalizedPath =
-            std::filesystem::path(event_ddrag_drop_file->fileName).lexically_normal().wstring();
+            std::filesystem::path(eventDragDropFile.fileName).lexically_normal().wstring();
         if (LoadFileOrFolder(normalizedPath,
                              IMCodec::PluginTraverseMode::AnyPlugin | IMCodec::PluginTraverseMode::AnyFileType))
         {
@@ -562,30 +555,22 @@ namespace OIV
         return false;
     }
 
-    bool ViewerApplication::HandleClientWindowMessages(const ::Win32::Event* evnt1)
+    bool ViewerApplication::HandleClientWindowMessages(const LWS::AnyEvent& eventData)
     {
-        using namespace ::Win32;
-        const EventWinMessage* evnt = dynamic_cast<const EventWinMessage*>(evnt1);
-
-        if (evnt != nullptr)
-        {
-            return ClientWindwMessage(evnt);
-        }
-        return false;
+        return ClientWindwMessage(eventData) != 0;
     }
 
-    bool ViewerApplication::HandleMessages(const ::Win32::Event* evnt1)
+    bool ViewerApplication::HandleMessages(const LWS::AnyEvent& eventData)
     {
-        using namespace ::Win32;
-        const EventWinMessage* evnt = dynamic_cast<const EventWinMessage*>(evnt1);
+        if (const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
+            raw != nullptr && raw->platformType == std::to_underlying(LWS::BackendId::Win32) &&
+            raw->platformData != nullptr)
+        {
+            return HandleWinMessageEvent(*reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData));
+        }
 
-        if (evnt != nullptr)
-            return HandleWinMessageEvent(evnt);
-
-        const EventDdragDropFile* dragDropEvent = dynamic_cast<const EventDdragDropFile*>(evnt1);
-
-        if (dragDropEvent != nullptr)
-            return HandleFileDragDropEvent(dragDropEvent);
+        if (const auto* dragDropEvent = std::get_if<LWS::EventDragDropFile>(&eventData))
+            return HandleFileDragDropEvent(*dragDropEvent);
 
         return false;
     }

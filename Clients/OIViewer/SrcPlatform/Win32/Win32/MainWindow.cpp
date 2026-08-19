@@ -1,8 +1,8 @@
 #include "MainWindow.h"
 #include <LLUtils/Buffer.h>
-#include <Win32/BitmapHelper.h>
-#include <Win32/Win32Helper.h>
+#include <LWS/Win32/EventWin32.hpp>
 #include "../Resource.h"
+#include <variant>
 
 namespace OIV
 {
@@ -10,7 +10,7 @@ namespace OIV
     {
         MainWindow::MainWindow()
         {
-            AddEventListener(std::bind(&MainWindow::HandleWindwMessage, this, std::placeholders::_1));
+            AddEventListener([this](const LWS::AnyEvent& eventData) { return HandleWindwMessage(eventData); });
         }
 
 
@@ -22,26 +22,23 @@ namespace OIV
 
                 if (fCursorsInitialized == false)
                 {
-                    const LLUtils::native_string_type CursorsPath = LLUtils::StringUtility::ToNativeString(LLUtils::PlatformUtility::GetExeFolder()) + LLUTILS_TEXT("./Resources/Cursors/");
-
-                    fCursors[0] = nullptr;
-                    fCursors[static_cast<size_t>(CursorType::SystemDefault)] = LoadCursor(nullptr, IDC_ARROW);
-                    fCursors[static_cast<size_t>(CursorType::East)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowE.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::NorthEast)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowNE.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::North)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowN.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::NorthWest)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowNW.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::West)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowW.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::SouthWest)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowSW.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::South)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowS.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::SouthEast)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowSE.cur")).c_str());
-                    fCursors[static_cast<size_t>(CursorType::SizeAll)] = LoadCursorFromFile((CursorsPath + LLUTILS_TEXT("ArrowC.cur")).c_str());
-
-
+                    fCursors[static_cast<size_t>(CursorType::SystemDefault)].setCursorShape(LWS::CursorShape::Arrow);
+                    fCursors[static_cast<size_t>(CursorType::East)].setCursorShape(LWS::CursorShape::SizeEW);
+                    fCursors[static_cast<size_t>(CursorType::NorthEast)].setCursorShape(LWS::CursorShape::SizeNESW);
+                    fCursors[static_cast<size_t>(CursorType::North)].setCursorShape(LWS::CursorShape::SizeNS);
+                    fCursors[static_cast<size_t>(CursorType::NorthWest)].setCursorShape(LWS::CursorShape::SizeNWSE);
+                    fCursors[static_cast<size_t>(CursorType::West)].setCursorShape(LWS::CursorShape::SizeEW);
+                    fCursors[static_cast<size_t>(CursorType::SouthWest)].setCursorShape(LWS::CursorShape::SizeNESW);
+                    fCursors[static_cast<size_t>(CursorType::South)].setCursorShape(LWS::CursorShape::SizeNS);
+                    fCursors[static_cast<size_t>(CursorType::SouthEast)].setCursorShape(LWS::CursorShape::SizeNWSE);
+                    fCursors[static_cast<size_t>(CursorType::SizeAll)].setCursorShape(LWS::CursorShape::SizeAll);
 
                     fCursorsInitialized = true;
                 }
                 fCurrentCursorType = type;
-                SetMouseCursor(fCurrentCursorType == CursorType::SystemDefault ? nullptr : fCursors[static_cast<int>(fCurrentCursorType)]);
+                SetMouseCursor(fCurrentCursorType == CursorType::SystemDefault
+                                   ? nullptr
+                                   : &fCursors[static_cast<int>(fCurrentCursorType)]);
             }
         }
 
@@ -56,7 +53,9 @@ namespace OIV
             fCanvasWindow.SetTransparent(true);
 
           
-            SetWindowIcon(::Win32::MakeIntResource(static_cast<size_t>(IDI_APP_ICON)));
+            HICON icon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
+            SendMessage(GetNativeHandle(), WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
+            SendMessage(GetNativeHandle(), WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
 
            
        
@@ -145,16 +144,15 @@ namespace OIV
 
         bool MainWindow::GetShowStatusBar() const
         {
-            using namespace ::Win32;
             // show status bar if explicity not visible and caption is visible
             return fShowStatusBar == true &&
-                ((GetWindowStyles() & (WindowStyle::Caption | WindowStyle::CloseButton | WindowStyle::MinimizeButton | WindowStyle::MaximizeButton)) != WindowStyle::NoStyle);
+                ((GetWindowStyles() & (LWS::WindowStyle::Caption | LWS::WindowStyle::CloseButton | LWS::WindowStyle::MinimizeButton | LWS::WindowStyle::MaximizeButton)) != LWS::WindowStyle::NoStyle);
         }
 
         void MainWindow::HandleResize()
         {
             RECT rect;
-            GetClientRect(GetHandle(), &rect);
+            ::GetClientRect(GetNativeHandle(), &rect);
             SIZE clientSize;
             const int ImageListWidth = 200;
             const bool isImageControlVisible = GetShowImageControl();
@@ -162,7 +160,7 @@ namespace OIV
             clientSize.cy = rect.bottom - rect.top;
 
 
-            if (GetShowStatusBar() && GetFullScreenState() == ::Win32::FullSceenState::Windowed)
+            if (GetShowStatusBar() && GetFullScreenState() == LWS::FullScreenState::Windowed)
             {
                 RECT statusBarRect;
                 ShowWindow(fHandleStatusBar, SW_SHOW);
@@ -175,17 +173,17 @@ namespace OIV
                 ShowWindow(fHandleStatusBar, SW_HIDE);
             }
 
-            SetWindowPos(fCanvasWindow.GetHandle(), nullptr, 0, 0, clientSize.cx, clientSize.cy, 0);
+            SetWindowPos(reinterpret_cast<HWND>(fCanvasWindow.GetHandle()), nullptr, 0, 0, clientSize.cx, clientSize.cy, 0);
 
-            if (fImageControl.GetHandle() != nullptr)
+            if (fImageControl.GetHandle() != 0)
             {
                 fImageControl.SetVisible(isImageControlVisible);
 
                 if (isImageControlVisible)
-                    SetWindowPos(fImageControl.GetHandle(), nullptr, clientSize.cx, 0, ImageListWidth, clientSize.cy, SWP_NOACTIVATE | SWP_NOZORDER);
+                    SetWindowPos(reinterpret_cast<HWND>(fImageControl.GetHandle()), nullptr, clientSize.cx, 0, ImageListWidth, clientSize.cy, SWP_NOACTIVATE | SWP_NOZORDER);
             }
 
-            ShowWindow(fHandleStatusBar, GetFullScreenState() == ::Win32::FullSceenState::Windowed ? SW_SHOW : SW_HIDE);
+            ShowWindow(fHandleStatusBar, GetFullScreenState() == LWS::FullScreenState::Windowed ? SW_SHOW : SW_HIDE);
         }
 
         void MainWindow::ShowStatusBar(bool show)
@@ -202,7 +200,7 @@ namespace OIV
             if (show != fShowImageControl)
             {
                 fShowImageControl = show;
-                if (fImageControl.GetHandle() == nullptr)
+                if (fImageControl.GetHandle() == 0)
 				{
                     fImageControl.Create();
 		            fImageControl.SetParent(this);
@@ -214,7 +212,7 @@ namespace OIV
 
         HWND MainWindow::GetCanvasHandle() const
         {
-            return fCanvasWindow.GetHandle();
+            return reinterpret_cast<HWND>(fCanvasWindow.GetHandle());
         }
 
 
@@ -222,22 +220,21 @@ namespace OIV
         SIZE MainWindow::GetCanvasSize() const
         {
             RECT rect;
-            GetClientRect(GetCanvasHandle(), &rect);
-            return ::Win32::Win32Helper::GetRectSize(rect);
+            ::GetClientRect(GetCanvasHandle(), &rect);
+            return {rect.right - rect.left, rect.bottom - rect.top};
         }
 
 
 
-        LRESULT MainWindow::HandleWindwMessage(const ::Win32::Event* evnt1)
+        bool MainWindow::HandleWindwMessage(const LWS::AnyEvent& eventData)
         {
-            using namespace ::Win32;
-            const EventWinMessage* evnt = dynamic_cast<const EventWinMessage*>(evnt1);
-            if (evnt == nullptr)
-                return 0;
+            const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
+            if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
+                raw->platformData == nullptr)
+                return false;
 
-            const WinMessage & message = evnt->message;
+            const LWS::Win32::WinMessage& message = *reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
 
-            LRESULT retValue = 0;
             switch (message.message)
             {
             case WM_CREATE:
@@ -256,12 +253,12 @@ namespace OIV
 
                 break;
             }
-            return retValue;
+            return false;
         }
 
         void MainWindow::SetIsTrayWindow(bool isTrayWindow)
         {
-            ::SetProp(GetHandle(), LLUTILS_TEXT("isTrayWindow"), isTrayWindow ?  reinterpret_cast<HANDLE>(1) : nullptr);
+            ::SetProp(GetNativeHandle(), LLUTILS_TEXT("isTrayWindow"), isTrayWindow ?  reinterpret_cast<HANDLE>(1) : nullptr);
         }
         
         bool MainWindow::GetIsTrayWindow(HWND hwnd)

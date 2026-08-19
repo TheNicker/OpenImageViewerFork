@@ -27,7 +27,7 @@ SOFTWARE.
 #include <LLUtils/Event.h>
 #include <LInput/Buttons/ButtonState.h>
 #include <LInput/Buttons/IButtonStateExtension.h>
-#include <Win32/HighPrecisionTimer.h>
+#include <LWS/Timer.hpp>
 #include <LInput/Mouse/MouseButton.h>
 
 namespace OIV
@@ -84,7 +84,7 @@ namespace OIV
 		int16_t fPosX = 0;
 		int16_t fPosY = 0;
 		int16_t fMaxMultiClickRadius = 10;
-		::Win32::HighPrecisionTimer fTimer = ::Win32::HighPrecisionTimer(std::bind(&MouseMultiClickHandler::TimerCallback, this));
+		LWS::HighPrecisionTimer fTimer = LWS::HighPrecisionTimer(std::bind(&MouseMultiClickHandler::TimerCallback, this));
 
 		std::array< ButtonData, 8> fButtonsData{};
 	

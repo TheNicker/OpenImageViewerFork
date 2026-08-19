@@ -22,9 +22,9 @@
 [submodule "External/LInput"]
 	path = External/LInput
 	url = https://github.com/TheNicker/LInput.git
-[submodule "External/Win32"]
-	path = External/Win32
-	url = https://github.com/TheNicker/Win32.git
 [submodule "External/catch2"]
 	path = External/catch2
 	url = https://github.com/catchorg/Catch2.git
+[submodule "External/LWS"]
+	path = External/LWS
+	url = https://github.com/OpenImageViewer/LWS.git

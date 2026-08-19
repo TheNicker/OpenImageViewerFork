@@ -1,6 +1,4 @@
 #include "AutoScroll.h"
-#include "Win32/UserMessages.h"
-#include <Win32/Win32Helper.h>
 
 
 namespace OIV
@@ -44,7 +42,10 @@ namespace OIV
 
     LLUtils::PointI32 AutoScroll::GetMousePosition()
     {
-        return static_cast<LLUtils::PointI32>(::Win32::Win32Helper::GetMouseCursorPosition(fCreateParams.windowHandle));
+        POINT clientMousePos{};
+        GetCursorPos(&clientMousePos);
+        ScreenToClient(fCreateParams.windowHandle, &clientMousePos);
+        return {clientMousePos.x, clientMousePos.y};
     }
 
 

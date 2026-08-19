@@ -14,8 +14,8 @@ namespace OIV
 
     void LabelManager::OnMonitorChange(const EventManager::MonitorChangeEventParams& params)
     {
-        std::get<0>(fDPI) = params.monitorDesc.DPIx;
-        std::get<1>(fDPI) = params.monitorDesc.DPIy;
+        std::get<0>(fDPI) = params.monitorDesc.dpiX;
+        std::get<1>(fDPI) = params.monitorDesc.dpiY;
         for (auto& [name, text] : fTextLabels)
             text->SetDPI(std::get<0>(fDPI), std::get<1>(fDPI));
     }

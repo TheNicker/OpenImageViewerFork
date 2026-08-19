@@ -114,7 +114,6 @@ target_include_directories(${TargetName} PRIVATE ../../OIVLib/OIV/Source)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
      target_include_directories(${TargetName} PRIVATE ${winreg_SOURCE_DIR}/WinReg)
-     target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/Win32/Win32/Include)
 endif()
 
 
@@ -131,7 +130,7 @@ oivshared
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
      target_link_libraries(${TargetName}
      #local libraries
-     Win32
+     LWSLib
      #system libraries
      kernel32.lib
      user32.lib
@@ -181,19 +180,19 @@ endif()
 
 #Copy own resources to the output dir
 add_custom_command(TARGET ${TargetName} POST_BUILD
-     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/Resources ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/Resources)
+     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/Resources $<TARGET_FILE_DIR:${TargetName}>/Resources)
 #Copy oiv library resources to the output dir
 add_custom_command(TARGET ${TargetName} POST_BUILD
-     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../OIVLib/OIV/Resources ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/Resources)
+     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../../OIVLib/OIV/Resources $<TARGET_FILE_DIR:${TargetName}>/Resources)
 
 if (NOT MINGW_POST_BUILD_DONT_COPY_BINARIES AND MINGW AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
      set(MINGW_ROOT /usr/x86_64-w64-mingw32)
      add_custom_command(TARGET ${TargetName} POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/lib/libgcc_s_seh-1.dll ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/)
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/lib/libgcc_s_seh-1.dll $<TARGET_FILE_DIR:${TargetName}>/)
 
      add_custom_command(TARGET ${TargetName} POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/lib/libstdc++-6.dll ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/)
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/lib/libstdc++-6.dll $<TARGET_FILE_DIR:${TargetName}>/)
 
      add_custom_command(TARGET ${TargetName} POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/bin/libwinpthread-1.dll ${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}/bin/)
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MINGW_ROOT}/bin/libwinpthread-1.dll $<TARGET_FILE_DIR:${TargetName}>/)
 endif()     

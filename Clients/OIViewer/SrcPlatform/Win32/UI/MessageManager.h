@@ -4,7 +4,7 @@
 #include <LLUtils/UniqueIDProvider.h>
 #include <LLUtils/EnumClassBitwise.h>
 #include <LLUtils/StopWatch.h>
-#include <Win32/Timer.h>
+#include <LWS/Timer.hpp>
 #include <OIVShared/RecursiveDelayOp.h>
 
 namespace OIV
@@ -73,8 +73,8 @@ namespace OIV
         uint32_t fMinDelayRemoveMessage = 1000;
         uint32_t fDelayPerCharacter = 40;
         LLUtils::StopWatch fStopWatch{ true };
-        ::Win32::Timer fTimerHideUserMessage;
-        ::Win32::Timer fFadeTimer;
+        LWS::Timer fTimerHideUserMessage;
+        LWS::Timer fFadeTimer;
         RequestRefreshCallbackType fRefreshCallback;
         RecursiveDelayedOp fRefreshRequest;
         int32_t fMaxMessageWidth{};

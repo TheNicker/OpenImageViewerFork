@@ -11,10 +11,6 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -148,9 +144,8 @@ namespace OIV
     {
         fShowBorders = !fShowBorders;
         {
-            using namespace ::Win32;
             fWindow.SetWindowStyles(
-                WindowStyle::ResizableBorder | WindowStyle::MaximizeButton | WindowStyle::MinimizeButton, fShowBorders);
+                LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton | LWS::WindowStyle::MinimizeButton, fShowBorders);
         }
     }
 

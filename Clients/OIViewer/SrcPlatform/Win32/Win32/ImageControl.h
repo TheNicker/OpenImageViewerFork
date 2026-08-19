@@ -2,20 +2,21 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include <tchar.h>
-#include <Win32/Win32Window.h>
+#include <LWS/Win32/EventWin32.hpp>
+#include <LWS/Win32/WindowWin32.hpp>
 #include "ImageList.h"
 namespace OIV
 {
     namespace Win32
 
     {
-        class ImageControl : public ::Win32::Win32Window
+        class ImageControl : public LWS::WindowWin32
         {
         public:
 
             ImageControl()
             {
-                AddEventListener(std::bind(&ImageControl::HandleWindwMessage, this, std::placeholders::_1));
+                AddEventListener([this](const LWS::AnyEvent& eventData) { return HandleWindwMessage(eventData); });
             }
 
             void SetImagePos(int pos)
@@ -28,6 +29,7 @@ namespace OIV
 
             void RefreshScrollInfo()
             {
+                HWND hwnd = reinterpret_cast<HWND>(GetHandle());
                 const size_t deltaElements = fImageList.GetNumberOfElements() - fImageList.GetNumberOfDisplayedElements();
                 SCROLLINFO si{};
                 si.cbSize = sizeof(SCROLLINFO);
@@ -35,21 +37,27 @@ namespace OIV
                 si.nMin = 0;
                 si.nMax = static_cast<int>((std::max)(static_cast<size_t>(0), deltaElements));
                 si.nPage = 1;
-                si.nPos = (std::min)(GetScrollPos(GetHandle(), SB_VERT), si.nMax);
-                SetScrollInfo(GetHandle(), SB_VERT, &si, TRUE);
+                si.nPos = (std::min)(GetScrollPos(hwnd, SB_VERT), si.nMax);
+                SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
                 SetImagePos(si.nPos);
-                InvalidateRect(GetHandle(), nullptr, TRUE);
+                InvalidateRect(hwnd, nullptr, TRUE);
             }
 
-            bool HandleWindwMessage(const ::Win32::Event* evnt1)
+            LRESULT SendMessage(UINT message, WPARAM wParam, LPARAM lParam)
+            {
+                return ::SendMessage(reinterpret_cast<HWND>(GetHandle()), message, wParam, lParam);
+            }
+
+            bool HandleWindwMessage(const LWS::AnyEvent& eventData)
             {
                 bool handled = true;
 
-                const ::Win32::EventWinMessage* evnt = dynamic_cast<const ::Win32::EventWinMessage*>(evnt1);
-                if (evnt == nullptr)
+                const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
+                if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
+                    raw->platformData == nullptr)
                     return false;
             
-                const ::Win32::WinMessage& msg = evnt->message;
+                const LWS::Win32::WinMessage& msg = *reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
                 switch (msg.message)
                 {
                 case WM_LBUTTONDOWN:
@@ -63,8 +71,9 @@ namespace OIV
                 case WM_VSCROLL:
                 {
                     INT minRange, maxRange;
-                    GetScrollRange(msg.hWnd, SB_VERT, &minRange, &maxRange);
-                    int oldPos = GetScrollPos(msg.hWnd, SB_VERT);
+                    HWND hwnd = reinterpret_cast<HWND>(msg.hWnd);
+                    GetScrollRange(hwnd, SB_VERT, &minRange, &maxRange);
+                    int oldPos = GetScrollPos(hwnd, SB_VERT);
                     int newPos = oldPos;
                     switch (LOWORD(msg.wParam))
                     {
@@ -89,8 +98,8 @@ namespace OIV
                     if (newPos != oldPos)
                     {
                         SetImagePos(newPos);
-                        SetScrollPos(msg.hWnd, SB_VERT, newPos, TRUE);
-                        InvalidateRect(msg.hWnd, nullptr, TRUE);
+                        SetScrollPos(hwnd, SB_VERT, newPos, TRUE);
+                        InvalidateRect(hwnd, nullptr, TRUE);
                     }
 
 
@@ -98,7 +107,7 @@ namespace OIV
                 break;
                 case WM_CREATE:
                 {
-                    fImageList.SetTarget(GetHandle());
+                    fImageList.SetTarget(reinterpret_cast<HWND>(GetHandle()));
                 }
                 break;
                 case WM_PAINT:

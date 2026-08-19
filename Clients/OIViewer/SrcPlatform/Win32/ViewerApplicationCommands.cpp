@@ -11,10 +11,6 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -226,16 +222,16 @@ namespace OIV
         {
             switch (fWindow.GetFullScreenState())
             {
-                case ::Win32::FullSceenState::MultiScreen:
+                case LWS::FullScreenState::MultiScreen:
                     result.resValue = LLUTILS_TEXT("Multi full screen");
                     break;
-                case ::Win32::FullSceenState::SingleScreen:
+                case LWS::FullScreenState::SingleScreen:
                     result.resValue = LLUTILS_TEXT("Full screen");
                     break;
-                case ::Win32::FullSceenState::Windowed:
+                case LWS::FullScreenState::Windowed:
                     result.resValue = LLUTILS_TEXT("Windowed");
                     break;
-                case ::Win32::FullSceenState::None:
+                case LWS::FullScreenState::None:
                     LL_EXCEPTION_UNEXPECTED_VALUE;
                     break;
             }
@@ -310,7 +306,6 @@ namespace OIV
         std::string cmd = request.args.GetArgValue("cmd");
         if (cmd == "savefile")
         {
-            using namespace ::Win32;
             LLUtils::native_string_type saveFilePath;
             LLUtils::native_string_type defaultFileName;
             if (IsImageOpen())
@@ -336,11 +331,11 @@ namespace OIV
                         break;
                 }
 
-                auto result = FileDialog::Show(FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
+                auto result = LWS::FileDialog::Show(LWS::FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
                                                LLUTILS_TEXT("Save an image"), fWindow.GetHandle(), LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
                                                fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
 
-                if (result == FileDialogResult::Success)
+                if (result == LWS::FileDialogResult::Success)
                 {
                     LLUtils::native_string_type extension = LLUtils::StringUtility::ToLower(
                         std::filesystem::path(saveFilePath).extension().wstring());
@@ -365,12 +360,11 @@ namespace OIV
 
         else
         {
-            using namespace ::Win32;
             LLUtils::native_string_type openFilePath;
-            auto result = FileDialog::Show(FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(), LLUTILS_TEXT("Open image"),
+            auto result = LWS::FileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(), LLUTILS_TEXT("Open image"),
                                            fWindow.GetHandle(), {}, 0, {}, openFilePath);
 
-            if (result == FileDialogResult::Success)
+            if (result == LWS::FileDialogResult::Success)
                 LoadFile(openFilePath, IMCodec::PluginTraverseMode::NoTraverse);
         }
     }
@@ -404,22 +398,28 @@ namespace OIV
     void ViewerApplication::CMD_SetWindowSize(const CommandManager::CommandRequest& request,
                                               CommandManager::CommandResult& result)
     {
-        const auto& workArea              = fCurrentMonitorProperties.monitorInfo.rcWork;
+        const auto& workRect              = fCurrentMonitorProperties.workRect;
+        const auto workAreaTopLeft        = workRect.GetCorner(LLUtils::TopLeft);
+        const auto workAreaBottomRight    = workRect.GetCorner(LLUtils::BottomRight);
+        const WindowWorkingArea workArea  = {.left   = workAreaTopLeft.x,
+                                             .top    = workAreaTopLeft.y,
+                                             .right  = workAreaBottomRight.x,
+                                             .bottom = workAreaBottomRight.y};
         const WindowSizeDecision decision = ViewCommandPolicy::DecideWindowSize(
             request.args, fWindow.GetWindowSize(), fWindow.GetPosition(),
-            {workArea.left, workArea.top, workArea.right, workArea.bottom});
+            workArea);
 
         switch (decision.mode)
         {
             case WindowSizeMode::Fullscreen:
-                fWindow.SetFullScreenState(::Win32::FullSceenState::SingleScreen);
+                fWindow.SetFullScreenState(LWS::FullScreenState::SingleScreen);
                 break;
             case WindowSizeMode::MultiFullscreen:
-                fWindow.SetFullScreenState(::Win32::FullSceenState::MultiScreen);
+                fWindow.SetFullScreenState(LWS::FullScreenState::MultiScreen);
                 break;
             case WindowSizeMode::Windowed:
-                if (fWindow.GetFullScreenState() != ::Win32::FullSceenState::Windowed)
-                    fWindow.SetFullScreenState(::Win32::FullSceenState::Windowed);
+                if (fWindow.GetFullScreenState() != LWS::FullScreenState::Windowed)
+                    fWindow.SetFullScreenState(LWS::FullScreenState::Windowed);
 
                 if (decision.position != fWindow.GetPosition())
                     fWindow.SetPosition(decision.position.x, decision.position.y);
@@ -555,7 +555,7 @@ namespace OIV
         {
             if (IsOpenedImageIsAFile())
             {
-                fClipboardHelper.SetClipboardText(GetOpenedFileName().c_str());
+                fClipboardHelper.SetClipboardText(fWindow.GetHandle(), GetOpenedFileName().c_str());
                 result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
             }
         }

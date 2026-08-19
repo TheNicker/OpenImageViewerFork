@@ -9,10 +9,11 @@ cmake_path(ABSOLUTE_PATH ExternalFolder NORMALIZE OUTPUT_VARIABLE ExternalFolder
 
 set(TargetName tests)
 
-add_subdirectory(${ExternalFolder}/catch2 ./external/catch2)
+if(NOT TARGET Catch2::Catch2WithMain)
+    add_subdirectory(${ExternalFolder}/catch2 ./external/catch2)
+endif()
 
 add_executable (${TargetName} ${sourceFiles})
-target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/catch2/src)
 target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/json/include)
 target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer)
 target_compile_definitions(${TargetName} PRIVATE OIV_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\")
