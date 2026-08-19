@@ -1,7 +1,9 @@
 name: Build all
 
 on:
+  # Automatically validate changes destined for master; keep manual runs available.
   push:
+    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
