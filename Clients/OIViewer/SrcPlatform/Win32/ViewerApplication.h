@@ -6,13 +6,12 @@
 #include <LLUtils/Rect.h>
 #include <LLUtils/EnumClassBitwise.h>
 
-#include <Win32/MonitorInfo.h>
-#include <Win32/NotificationIconGroup.h>
-#include <Win32/HighPrecisionTimer.h>
-#include <Win32/Timer.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Clipboard.h>
-#include <Win32/FileDialog.h>
+#include <LWS/Clipboard.hpp>
+#include <LWS/FileDialog.hpp>
+#include <LWS/NotificationIconGroup.hpp>
+#include <LWS/Platform.hpp>
+#include <LWS/Timer.hpp>
+#include <LWS/Win32/EventWin32.hpp>
 
 #include "Win32/MainWindow.h"
 #include "AutoScroll.h"
@@ -161,18 +160,18 @@ namespace OIV
         LLUtils::native_string_type GetLogFilePath();
         void HandleException(bool isFromLibrary, LLUtils::Exception::EventArgs args, LLUtils::native_string_type seperatedCallStack);
 #pragma region Win32 event handling
-        bool handleKeyInput(const ::Win32::EventWinMessage* evnt);
-        LRESULT ClientWindwMessage(const ::Win32::Event* evnt1);
+        bool handleKeyInput(const LWS::Win32::WinMessage& message);
+        LRESULT ClientWindwMessage(const LWS::AnyEvent& eventData);
         void SetTopMostUserMesage();
         void ProcessTopMost();
         void SetAppActive(bool active);
         bool GetAppActive() const;
 
-        bool HandleWinMessageEvent(const ::Win32::EventWinMessage* evnt);
+        bool HandleWinMessageEvent(const LWS::Win32::WinMessage& message);
         void CloseApplication(bool closeToTray);
-        bool HandleFileDragDropEvent(const ::Win32::EventDdragDropFile* event_ddrag_drop_file);
-        bool HandleMessages(const ::Win32::Event* evnt);
-        bool HandleClientWindowMessages(const ::Win32::Event* evnt);
+        bool HandleFileDragDropEvent(const LWS::EventDragDropFile& eventDragDropFile);
+        bool HandleMessages(const LWS::AnyEvent& eventData);
+        bool HandleClientWindowMessages(const LWS::AnyEvent& eventData);
         double GetMinimumPixelSize();
 
 #pragma endregion Win32 event handling
@@ -290,7 +289,7 @@ namespace OIV
         void ProcessCurrentFileChanged();
         void ProcessRemovalOfOpenedFile(const LLUtils::native_string_type& fileName);
 
-        void OnNotificationIcon(::Win32::NotificationIconGroup::NotificationIconEventArgs args);
+        void OnNotificationIcon(LWS::NotificationIconGroup::NotificationIconEventArgs args);
         void DelayResamplingCallback();
         void ShowImageInfo();
         void CountColorsAsync();
@@ -326,9 +325,9 @@ namespace OIV
 #pragma region FrameLimiter
         const bool EnableFrameLimiter = true;
         std::chrono::high_resolution_clock::time_point fLastRefreshTime;
-        ::Win32::HighPrecisionTimer fRefreshTimer;
+        LWS::HighPrecisionTimer fRefreshTimer;
         uint32_t fRefreshRateTimes1000 = 60'000;
-        ::Win32::MonitorDesc fCurrentMonitorProperties{};
+        LWS::Platform::MonitorDesc fCurrentMonitorProperties{};
         MonitorProvider fMonitorProvider;
 #pragma endregion FrameLimiter
         Win32::MainWindow fWindow;
@@ -369,13 +368,13 @@ namespace OIV
         SelectionRect fSelectionRect;
         uint32_t fQueueResamplingDelay        = 50;
         LLUtils::RectI32 fImageSpaceSelection = LLUtils::RectI32::Zero;
-        ::Win32::Timer fTimerTopMostRetention;
-        ::Win32::Timer fTimerSlideShow;
-        ::Win32::Clipboard fClipboardHelper;
+        LWS::Timer fTimerTopMostRetention;
+        LWS::Timer fTimerSlideShow;
+        LWS::Clipboard fClipboardHelper;
 
         int fTopMostCounter = 0;
-        ::Win32::Timer fTimerNoActiveZoom;
-        ::Win32::Timer fTimerNavigation;
+        LWS::Timer fTimerNoActiveZoom;
+        LWS::Timer fTimerNavigation;
         bool fIsResamplingEnabled          = false;
         bool fQueueImageInfoLoad           = false;
         uint16_t fQuickBrowseDelay         = 100;
@@ -393,8 +392,8 @@ namespace OIV
         LLUtils::PointF64 fDPIadjustmentFactor{1.0, 1.0};
         IMCodec::ImageLoader fImageLoader;
         std::unique_ptr<ImageOpenController> fImageOpenController;
-        //::Win32::ClipboardFormatType fRTFFormatID {};
-        //::Win32::ClipboardFormatType fHTMLFormatID {};
+        //LWS::ClipboardFormatType fRTFFormatID {};
+        //LWS::ClipboardFormatType fHTMLFormatID {};
 
         DeletedFileRemovalMode fDeletedFileRemovalMode = DeletedFileRemovalMode::DeletedInternally;
 
@@ -427,14 +426,14 @@ namespace OIV
         LLUtils::native_string_type fCurrentFolderWatched;
         std::set<LLUtils::native_string_type> fKnownFileTypesSet;
         LLUtils::native_string_type fKnownFileTypes;
-        ::Win32::FileDialogFilterBuilder fOpenComDlgFilters;
-        ::Win32::FileDialogFilterBuilder fSaveComDlgFilters;
+        LWS::FileDialogFilterBuilder fOpenComDlgFilters;
+        LWS::FileDialogFilterBuilder fSaveComDlgFilters;
         LLUtils::native_string_type fDefaultSaveFileExtension = LLUTILS_TEXT("png");
         int16_t fDefaultSaveFileFormatIndex    = -1;
         LLUtils::native_string_type fPendingFolderLoad;
         LLUtils::StopWatch fLastImageLoadTimeStamp;
-        ::Win32::NotificationIconGroup fNotificationIcons;
-        ::Win32::NotificationIconGroup::IconID fNotificationIconID;
+        LWS::NotificationIconGroup fNotificationIcons;
+        LWS::NotificationIconGroup::IconID fNotificationIconID;
         std::unique_ptr<MessageManager> fMessageManager;
         void OnSettingChange(const LLUtils::native_string_type& key, const LLUtils::native_string_type& value);
         void LoadSettings();
@@ -465,8 +464,8 @@ namespace OIV
 
         std::unique_ptr<ContextMenu<MenuItemData>> fContextMenu;
         LLUtils::PointI32 fDownPosition;
-        ::Win32::Timer fContextMenuTimer;
-        ::Win32::Timer fSequencerTimer;
+        LWS::Timer fContextMenuTimer;
+        LWS::Timer fSequencerTimer;
         FileSorter fFileSorter;
         // Destruction order matters: the browse session unregisters folders from the watcher, and the watcher may
         // still suppress callbacks through fIsShuttingDown / fEventSync while shutting down. Keep this order.

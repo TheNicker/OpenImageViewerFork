@@ -1,7 +1,7 @@
 #pragma once
 #include <fstream>
 #include <LLUtils/PlatformUtility.h>
-#include <Win32/BitmapHelper.h>
+#include <LWS/Bitmap.hpp>
 
 class ImageList
 {
@@ -52,8 +52,8 @@ public:
     {
         uint32_t index{};
         LLUtils::native_string_type title;
-        ::Win32::BitmapSharedPtr bitmap;
-        ::Win32::BitmapSharedPtr mask;
+        LWS::BitmapSharedPtr bitmap;
+        LWS::BitmapSharedPtr mask;
     };
 
     struct RGBAImageDesc
@@ -203,8 +203,9 @@ public:
 
             
 
-            int finalWidth = std::min<int>(imageDestWidth, imageDesc.bitmap->GetBitmapHeader().biWidth);
-            int finalHeight = std::min<int>(imageDestHeight, imageDesc.bitmap->GetBitmapHeader().biHeight);
+            const auto bitmapHeader = imageDesc.bitmap->GetBitmapHeader();
+            int finalWidth = std::min<int>(imageDestWidth, bitmapHeader.width);
+            int finalHeight = std::min<int>(imageDestHeight, bitmapHeader.height);
 
 
             int imageFinalLocalYPos = finalHeight < imageDestHeight ? (fEntryHeight - finalHeight) / 2 : imagePos;
@@ -215,8 +216,8 @@ public:
             bf.SourceConstantAlpha = 0xef;  // half of 0xff = 50% transparency 
             bf.AlphaFormat = 0;             // ignore source alpha channel 
 
-            HBITMAP currentMask = imageDesc.mask->GetHBitmap();
-            HBITMAP currentBitmap = imageDesc.bitmap->GetHBitmap();
+            HBITMAP currentMask = reinterpret_cast<HBITMAP>(imageDesc.mask->GetNativeHandle());
+            HBITMAP currentBitmap = reinterpret_cast<HBITMAP>(imageDesc.bitmap->GetNativeHandle());
             HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMem, currentMask);
             BitBlt(hdc, (entrywidth - finalWidth) / 2, y + imageFinalLocalYPos, finalWidth, finalHeight, hdcMem, 0, 0, SRCPAINT);
 

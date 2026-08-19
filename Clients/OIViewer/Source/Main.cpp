@@ -1,11 +1,13 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
-#include <Win32/UserMessages.h>
+#include "Win32/UserMessages.h"
 #endif
 
 #include <ViewerApplication.h>
+#include <LWS/Platform.hpp>
 
+#include <stdexcept>
 
 LLUtils::native_string_type CompileFilePathFromArguments(int argc, const wchar_t** argv)
 {
@@ -23,6 +25,10 @@ LLUtils::native_string_type CompileFilePathFromArguments(int argc, const wchar_t
 
 void RunApp(const LLUtils::native_string_type& filePath)
 {
+    const LWS::Platform::Session platformSession;
+    if (!platformSession)
+        throw std::runtime_error("Unable to initialize the LWS platform");
+
     OIV::ViewerApplication viewerApplication;
     viewerApplication.Init(filePath);
     viewerApplication.Run();

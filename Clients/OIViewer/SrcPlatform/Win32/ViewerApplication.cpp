@@ -11,10 +11,7 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
+#include <LWS/Platform.hpp>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -37,7 +34,6 @@
 #include "Helpers/ShellIntegrationHelper.h"
 #include "Helpers/ShellCommandHandler.h"
 
-#include "Win32/UserMessages.h"
 #include "OIVCommands.h"
 
 #include "OIVImage/OIVFileImage.h"
@@ -82,14 +78,12 @@ namespace OIV
 
     HWND ViewerApplication::FindTrayBarWindow()
     {
-        using namespace Win32;
-
         HWND nextChild = nullptr;
 
         do
         {
-            nextChild = FindWindowEx(nullptr, nextChild, ::Win32::Win32Window::WindowClassName, nullptr);
-        } while (nextChild != nullptr && MainWindow::GetIsTrayWindow(nextChild) == false);
+            nextChild = FindWindowEx(nullptr, nextChild, nullptr, nullptr);
+        } while (nextChild != nullptr && Win32::MainWindow::GetIsTrayWindow(nextChild) == false);
 
         return nextChild;
     }
@@ -133,21 +127,22 @@ namespace OIV
         fWindow.SetMenuChar(false);
         fWindow.ShowStatusBar(false);
         fWindow.SetDestoryOnClose(false);
-        fWindow.EnableDragAndDrop(true);
+        if (fWindow.EnableDragAndDrop(true) != LWS::Result::Success)
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to enable window drag and drop");
         // Set canvas background the same color as in the renderer for flicker free startup.
         // TODO: fix resize and disable background erasure of top level windows.
         fWindow.SetBackgroundColor(LLUtils::Color(45, 45, 48));
         fWindow.GetCanvasWindow().SetBackgroundColor(LLUtils::Color(45, 45, 48));
 
-        fWindow.SetDoubleClickMode(::Win32::DoubleClickMode::Default);
+        fWindow.SetDoubleClickMode(LWS::DoubleClickMode::Default);
         {
             using namespace ::OIV::Win32;
-            fWindow.SetWindowStyles(::Win32::WindowStyle::ResizableBorder | ::Win32::WindowStyle::MaximizeButton |
-                                        ::Win32::WindowStyle::MinimizeButton,
+            fWindow.SetWindowStyles(LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton |
+                                        LWS::WindowStyle::MinimizeButton,
                                     true);
         }
 
-        AutoScroll::CreateParams params = {fWindow.GetHandle(), Win32::UserMessage::PRIVATE_WN_AUTO_SCROLL,
+        AutoScroll::CreateParams params = {reinterpret_cast<HWND>(fWindow.GetHandle()),
                                            std::bind(&ViewerApplication::OnScroll, this, std::placeholders::_1)};
         fAutoScroll                     = std::make_unique<AutoScroll>(params);
 
@@ -204,7 +199,7 @@ namespace OIV
                 RefreshImage();
             });
 
-        fMessageManager = std::make_unique<MessageManager>(fWindow.GetHandle(), &fLabelManager, 5,
+        fMessageManager = std::make_unique<MessageManager>(reinterpret_cast<HWND>(fWindow.GetHandle()), &fLabelManager, 5,
                                                            [&]() -> void { fRefreshOperation.Queue(); });
 
         fRenderGateway.Initialize(fWindow.GetCanvasHandle());
@@ -295,8 +290,8 @@ namespace OIV
         const ImageFormatCatalog imageFormatCatalog = ImageFormatCatalogPolicy::Build(
             fImageLoader.GetImageCodec().GetPluginsInfo());
 
-        ::Win32::FileDialogFilterBuilder::ListFileDialogFilters readFilters;
-        ::Win32::FileDialogFilterBuilder::ListFileDialogFilters writeFilters;
+        LWS::FileDialogFilterBuilder::ListFileDialogFilters readFilters;
+        LWS::FileDialogFilterBuilder::ListFileDialogFilters writeFilters;
 
         for (const ImageFormatFilter& filter : imageFormatCatalog.readFilters)
             readFilters.push_back({filter.description, filter.extensions});
@@ -309,8 +304,8 @@ namespace OIV
         fDefaultSaveFileExtension   = imageFormatCatalog.defaultSaveFileExtension;
         fDefaultSaveFileFormatIndex = imageFormatCatalog.defaultSaveFileFormatIndex;
 
-        fOpenComDlgFilters = {readFilters};
-        fSaveComDlgFilters = {writeFilters};
+        fOpenComDlgFilters = LWS::FileDialogFilterBuilder(readFilters);
+        fSaveComDlgFilters = LWS::FileDialogFilterBuilder(writeFilters);
 
         fFileWatcher.FileChangedEvent.Add(std::bind(&ViewerApplication::OnFileChanged, this, std::placeholders::_1));
 
@@ -350,7 +345,7 @@ namespace OIV
 
         fContextMenuTimer.SetTargetWindow(fWindow.GetHandle());
         fContextMenuTimer.SetCallback(std::bind(&ViewerApplication::OnContextMenuTimer, this));
-        fContextMenu = std::make_unique<ContextMenu<MenuItemData>>(fWindow.GetHandle());
+        fContextMenu = std::make_unique<ContextMenu<MenuItemData>>(reinterpret_cast<HWND>(fWindow.GetHandle()));
 
         fContextMenu->AddItem(LLUTILS_TEXT("Open"), MenuItemData{"cmd_open_file", ""});
         fContextMenu->AddItem(LLUTILS_TEXT("Open containing folder"),
@@ -366,12 +361,11 @@ namespace OIV
                                  fImageState.GetOpenedImage() != nullptr &&
                                      fImageState.GetOpenedImage()->GetImageSource() == ImageSource::File);
 
-        fNotificationIconID = fNotificationIcons.AddIcon(MAKEINTRESOURCE(IDI_APP_ICON),
-                                                         LLUTILS_TEXT("Open Image Viewer"));
+        fNotificationIconID = fNotificationIcons.AddIconResource(IDI_APP_ICON, LLUTILS_TEXT("Open Image Viewer"));
         fNotificationIcons.OnNotificationIconEvent.Add(
             std::bind(&ViewerApplication::OnNotificationIcon, this, std::placeholders::_1));
 
-        fNotificationContextMenu = std::make_unique<ContextMenu<int>>(fWindow.GetHandle());
+        fNotificationContextMenu = std::make_unique<ContextMenu<int>>(reinterpret_cast<HWND>(fWindow.GetHandle()));
         fNotificationContextMenu->AddItem(OIV_TEXT("Quit"), int{});
 
         using namespace LInput;
@@ -426,7 +420,7 @@ namespace OIV
             else
             {
                 // Handle Windows messages
-                shouldQuit = ::Win32::Win32Helper::ProcessApplicationMessage();
+                shouldQuit = LWS::Platform::processMessages();
             }
         }
     }
@@ -494,26 +488,27 @@ namespace OIV
 
         PointF64 canvasCenter;
 
-        if (fWindow.GetFullScreenState() != ::Win32::FullSceenState::MultiScreen) [[likely]]
+        if (fWindow.GetFullScreenState() != LWS::FullScreenState::MultiScreen) [[likely]]
         {
             canvasCenter = PointF64(fWindow.GetCanvasSize()) / 2.0;
         }
         else [[unlikely]]
         {
-            RECT primaryMonitorCoords =
-                ::Win32::MonitorInfo::GetSingleton().GetPrimaryMonitor(false).monitorInfo.rcMonitor;
-            RECT boundingArea = ::Win32::MonitorInfo::GetSingleton().getBoundingMonitorArea();
+            const auto primaryMonitor      = LWS::Platform::getPrimaryMonitor(false).monitorRect;
+            const auto boundingArea        = LWS::Platform::getBoundingMonitorArea();
+            const auto primaryMonitorP0    = primaryMonitor.GetCorner(TopLeft);
+            const auto boundingAreaP0      = boundingArea.GetCorner(TopLeft);
 
             using point_type = PointF64::point_type;
-            auto leftDelta   = primaryMonitorCoords.left - boundingArea.left;
-            auto topDelta    = primaryMonitorCoords.top - boundingArea.top;
+            const auto leftDelta = primaryMonitorP0.x - boundingAreaP0.x;
+            const auto topDelta  = primaryMonitorP0.y - boundingAreaP0.y;
 
             const LLUtils::PointF64 primaryScreenOffset = LLUtils::PointF64(static_cast<point_type>(leftDelta),
                                                                             static_cast<point_type>(topDelta));
 
             const LLUtils::PointF64 primaryScreenSize = LLUtils::PointF64(
-                static_cast<point_type>(primaryMonitorCoords.right - primaryMonitorCoords.left),
-                static_cast<point_type>(primaryMonitorCoords.bottom - primaryMonitorCoords.top));
+                static_cast<point_type>(primaryMonitor.GetWidth()),
+                static_cast<point_type>(primaryMonitor.GetHeight()));
 
             canvasCenter = primaryScreenOffset + primaryScreenSize / 2.0;
         }

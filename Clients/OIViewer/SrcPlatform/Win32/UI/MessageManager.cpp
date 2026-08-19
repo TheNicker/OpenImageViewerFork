@@ -6,9 +6,9 @@ namespace OIV
         fWindow(associatedtimerWindow), fLabelManager(labelManager), fMaxMessages(maxMessages), fRefreshCallback(callback)
         , fRefreshRequest(std::bind(&MessageManager::OnRefresh, this))
     {
-        fTimerHideUserMessage.SetTargetWindow(fWindow);
+        fTimerHideUserMessage.SetTargetWindow(reinterpret_cast<LWS::Handle>(fWindow));
         fTimerHideUserMessage.SetCallback(std::bind(&MessageManager::OnTimer, this));
-        fFadeTimer.SetTargetWindow(fWindow);
+        fFadeTimer.SetTargetWindow(reinterpret_cast<LWS::Handle>(fWindow));
         fFadeTimer.SetCallback(std::bind(&MessageManager::OnTimer, this));
 
         EventManager::GetSingleton().SizeChange.Add(std::bind(&MessageManager::OnWindowSizeChange, this, std::placeholders::_1));

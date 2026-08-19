@@ -11,10 +11,7 @@
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-#include <Win32/Win32Window.h>
-#include <Win32/Win32Helper.h>
-#include <Win32/MonitorInfo.h>
-#include <Win32/FileDialog.h>
+#include <LWS/Platform.hpp>
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LInput/Keys/KeyBindings.h>
@@ -283,24 +280,24 @@ namespace OIV
         fCurrentMonitorProperties = params.monitorDesc;
 
         // update the refresh rate.
-        fRefreshRateTimes1000 = params.monitorDesc.DisplaySettings.dmDisplayFrequency == 59
+        fRefreshRateTimes1000 = params.monitorDesc.displayFrequency == 59
                                     ? 59940
-                                    : params.monitorDesc.DisplaySettings.dmDisplayFrequency * 1000;
+                                    : params.monitorDesc.displayFrequency * 1000;
 
         const LLUtils::PointF64 BaseDPI{96.0, 96.0};
 
         // DPI adjustment. The mouse generates movement events as district units.
         // To keep movement speed constant across several monitors in terms of distance,
         // DPI must be taken care into consideration.
-        fDPIadjustmentFactor = LLUtils::PointF64{static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.DPIx),
-                                                 static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.DPIy)} /
+        fDPIadjustmentFactor = LLUtils::PointF64{static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.dpiX),
+                                                 static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.dpiY)} /
                                BaseDPI;
     }
 
     void ViewerApplication::ProbeForMonitorChange()
     {
         if (fIsFirstFrameDisplayed == true)
-            fMonitorProvider.UpdateFromWindowHandle(fWindow.GetHandle());
+            fMonitorProvider.UpdateFromWindowHandle(reinterpret_cast<HWND>(fWindow.GetHandle()));
     }
 
     void ViewerApplication::PerformRefresh()
@@ -356,7 +353,7 @@ namespace OIV
 
     HWND ViewerApplication::GetWindowHandle() const
     {
-        return fWindow.GetHandle();
+        return reinterpret_cast<HWND>(fWindow.GetHandle());
     }
 
 #define WIDEN2(x) L##x
@@ -430,7 +427,7 @@ namespace OIV
     void ViewerApplication::OnContextMenuTimer()
     {
         fContextMenuTimer.SetInterval(0);
-        auto pos        = ::Win32::Win32Helper::GetMouseCursorPosition();
+        auto pos        = LWS::Platform::getMousePosition();
         auto chosenItem = fContextMenu->Show(pos.x - 16, pos.y + -16, AlignmentHorizontal::Center,
                                              AlignmentVertical::Center);
 
@@ -521,16 +518,15 @@ namespace OIV
                             LLUtils::StringUtility::ToWString(pair.second));
     }
 
-    void ViewerApplication::OnNotificationIcon(::Win32::NotificationIconGroup::NotificationIconEventArgs args)
+    void ViewerApplication::OnNotificationIcon(LWS::NotificationIconGroup::NotificationIconEventArgs args)
     {
-        using namespace ::Win32;
         switch (args.action)
         {
-            case NotificationIconGroup::NotificationIconAction::Select:
-                if (fWindow.GetVisible() == false || fWindow.GetWindowDisplayState() == WindowDisplayState::Minimized)
+            case LWS::NotificationIconGroup::NotificationIconAction::Select:
+                if (fWindow.GetVisible() == false || fWindow.GetWindowDisplayState() == LWS::WindowDisplayState::Minimized)
                 {
                     fWindow.SetVisible(true);
-                    fWindow.SetWindowDisplayState(WindowDisplayState::Restored);
+                    fWindow.SetWindowDisplayState(LWS::WindowDisplayState::Restored);
                     fWindow.SetForground();
                 }
                 else
@@ -538,7 +534,7 @@ namespace OIV
                     fWindow.SetVisible(false);
                 }
                 break;
-            case NotificationIconGroup::NotificationIconAction::ContextMenu:
+            case LWS::NotificationIconGroup::NotificationIconAction::ContextMenu:
             {
                 auto rect       = fNotificationIcons.GetIconRect(fNotificationIconID);
                 auto bottomLeft = ShellIntegrationHelper::TrayContextMenuPosition(rect);
@@ -555,7 +551,7 @@ namespace OIV
                 }
             }
             break;
-            case NotificationIconGroup::NotificationIconAction::None:
+            case LWS::NotificationIconGroup::NotificationIconAction::None:
                 LL_EXCEPTION_UNEXPECTED_VALUE;
                 break;
         }
