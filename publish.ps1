@@ -1169,7 +1169,7 @@ function Invoke-Package {
         Update-PackageBuildInfo $Context
     }
 
-    $baseName = Join-PathForward $outputDir "$($Context.DateShort)-OIV-$($Context.VersionFull)-$($Context.PackageNameSuffix)"
+    $baseName = Join-PathForward $outputDir "OIV-$($Context.VersionFull)-$($Context.PackageNameSuffix)"
 
     Ensure-Directory $outputDir
 

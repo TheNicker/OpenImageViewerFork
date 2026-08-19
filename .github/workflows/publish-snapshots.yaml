@@ -19,10 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       publish_sha: ${{ steps.resolve.outputs.sha }}
-      publish_branch: ${{ steps.resolve.outputs.branch }}
       should_publish: ${{ steps.resolve.outputs.should_publish }}
-      publish_mode: ${{ steps.resolve.outputs.publish_mode }}
-      validation_bypassed: ${{ steps.resolve.outputs.validation_bypassed }}
 
     steps:
       - name: Resolve snapshot
@@ -74,9 +71,6 @@ jobs:
 
           "should_publish=true" >> $env:GITHUB_OUTPUT
           "sha=$sha" >> $env:GITHUB_OUTPUT
-          "branch=$branch" >> $env:GITHUB_OUTPUT
-          "publish_mode=$publishMode" >> $env:GITHUB_OUTPUT
-          "validation_bypassed=$($validationBypassed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Publishing snapshot for $sha from '$branch' in $publishMode mode. Build validation bypassed: $validationBypassed."
 
   build-package:
@@ -107,7 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: snapshot-package
-          path: publish/**/*.7z
+          path: publish/**/OIV-*
           if-no-files-found: error
           retention-days: 7
 
@@ -128,11 +122,7 @@ jobs:
     env:
       RELEASE_REPOSITORY: ${{ github.event.repository.fork && github.repository || format('{0}/snapshots', github.repository_owner) }}
       RELEASE_TAG: snapshot
-      RELEASE_TITLE: Snapshot build
-      PUBLISH_MODE: ${{ needs.gate.outputs.publish_mode }}
-      PUBLISH_BRANCH: ${{ needs.gate.outputs.publish_branch }}
       PUBLISH_SHA: ${{ needs.gate.outputs.publish_sha }}
-      VALIDATION_BYPASSED: ${{ needs.gate.outputs.validation_bypassed }}
 
     steps:
       - name: Download package artifact
@@ -145,33 +135,44 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          $archives = @(Get-ChildItem -Path "snapshot-package" -Recurse -File -Filter "*.7z")
-          $runtimeArchives = @($archives | Where-Object { $_.Name -notlike "*-Symbols.7z" })
-          $symbolsArchives = @($archives | Where-Object { $_.Name -like "*-Symbols.7z" })
+          $archivePattern = '^OIV-.+(?:\.[^.]+)+$'
+          $symbolsPattern = '-Symbols(?:\.[^.]+)+$'
+          $archives = @(Get-ChildItem -Path "snapshot-package" -Recurse -File | Where-Object { $_.Name -match $archivePattern })
+          $runtimeArchives = @($archives | Where-Object { $_.Name -notmatch $symbolsPattern })
+          $symbolsArchives = @($archives | Where-Object { $_.Name -match $symbolsPattern })
 
           if ($runtimeArchives.Count -ne 1) {
               $archiveList = if ($runtimeArchives.Count -eq 0) { "<none>" } else { ($runtimeArchives | ForEach-Object { $_.FullName }) -join "`n" }
-              throw "Expected exactly one runtime .7z archive, found $($runtimeArchives.Count):`n$archiveList"
+              throw "Expected exactly one runtime archive, found $($runtimeArchives.Count):`n$archiveList"
           }
 
           if ($symbolsArchives.Count -ne 1) {
               $archiveList = if ($symbolsArchives.Count -eq 0) { "<none>" } else { ($symbolsArchives | ForEach-Object { $_.FullName }) -join "`n" }
-              throw "Expected exactly one symbols .7z archive, found $($symbolsArchives.Count):`n$archiveList"
+              throw "Expected exactly one symbols archive, found $($symbolsArchives.Count):`n$archiveList"
           }
 
           $runtimeArchive = $runtimeArchives[0]
           $symbolsArchive = $symbolsArchives[0]
+          $titlePattern = '^(?<title>OIV-\d+(?:\.\d+)+-[0-9a-f]+)(?:-.+)?(?:\.[^.]+)+$'
+          if ($runtimeArchive.Name -notmatch $titlePattern) {
+              throw "Runtime archive name '$($runtimeArchive.Name)' does not contain an OIV version and commit prefix."
+          }
+
+          $releaseTitle = $Matches.title
           "runtime_archive_path=$($runtimeArchive.FullName)" >> $env:GITHUB_OUTPUT
           "runtime_archive_name=$($runtimeArchive.Name)" >> $env:GITHUB_OUTPUT
           "symbols_archive_path=$($symbolsArchive.FullName)" >> $env:GITHUB_OUTPUT
           "symbols_archive_name=$($symbolsArchive.Name)" >> $env:GITHUB_OUTPUT
+          "release_title=$releaseTitle" >> $env:GITHUB_OUTPUT
           "Selected runtime archive $($runtimeArchive.FullName)"
           "Selected symbols archive $($symbolsArchive.FullName)"
+          "Release title $releaseTitle"
 
       - name: Publish snapshot release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.event.repository.fork && github.token || secrets.SNAPSHOTS_TOKEN }}
+          RELEASE_TITLE: ${{ steps.package.outputs.release_title }}
           RUNTIME_ARCHIVE_PATH: ${{ steps.package.outputs.runtime_archive_path }}
           RUNTIME_ARCHIVE_NAME: ${{ steps.package.outputs.runtime_archive_name }}
           SYMBOLS_ARCHIVE_PATH: ${{ steps.package.outputs.symbols_archive_path }}
@@ -186,14 +187,7 @@ jobs:
               throw "Release token is not configured."
           }
 
-          $notes = @"
-          Source repository: $env:GITHUB_REPOSITORY
-          Source branch: $env:PUBLISH_BRANCH
-          Source commit: $env:PUBLISH_SHA
-          Publish mode: $env:PUBLISH_MODE
-          Build validation bypassed: $env:VALIDATION_BYPASSED
-          Publish workflow run: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID
-          "@.Trim()
+          $notes = "Source commit: $env:PUBLISH_SHA"
 
           $releaseExists = $true
           try {
