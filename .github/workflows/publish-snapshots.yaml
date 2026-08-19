@@ -39,9 +39,13 @@ jobs:
         with:
           repository: ${{ github.repository }}
           ref: ${{ env.PUBLISH_SHA }}
-          submodules: recursive
-          fetch-depth: 1
+          # Keep full main-repository history so publish.ps1 can extract the Git revision count.
+          fetch-depth: 0
+          submodules: false
           persist-credentials: false
+
+      - name: Checkout shallow submodules
+        run: git submodule update --init --recursive --depth 1
 
       - name: Build runtime package
         shell: pwsh
