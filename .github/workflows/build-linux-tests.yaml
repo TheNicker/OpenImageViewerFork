@@ -37,6 +37,16 @@ jobs:
         ${{ matrix.compiler.cc }} --version
         ${{ matrix.compiler.cxx }} --version
 
+    - name: Run release publishing tests
+      shell: pwsh
+      run: |
+        Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+        Import-Module Pester -RequiredVersion 4.10.1 -Force
+        $result = Invoke-Pester -Script "Tests/PowerShell/Publish-GitHubRelease.Tests.ps1" -PassThru
+        if ($result.FailedCount -gt 0) {
+            throw "$($result.FailedCount) release publishing tests failed."
+        }
+
     - name: Install linker
       if: matrix.compiler.name == 'clang'
       run: |

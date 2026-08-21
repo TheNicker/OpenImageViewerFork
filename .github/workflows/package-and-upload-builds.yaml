@@ -1,6 +1,6 @@
-name: Publish Snapshots
+name: Package and Upload Builds
 
-run-name: Publish snapshot for ${{ github.event.workflow_run.head_sha || github.sha }}
+run-name: Publish ${{ inputs.official_release && 'official release' || 'snapshot' }} for ${{ github.event.workflow_run.head_sha || github.sha }}
 
 on:
   workflow_run:
@@ -9,16 +9,23 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      official_release:
+        description: Publish a stable Major.Minor.Patch release
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
 
 env:
   PUBLISH_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  OFFICIAL_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release || false }}
 
 jobs:
   build-package:
-    name: Build snapshot package
+    name: Build release package
     # Manual runs bypass CI validation; automatic runs require a successful push build on the release branch.
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -30,7 +37,7 @@ jobs:
     runs-on: windows-2025-vs2026
     timeout-minutes: 90
     concurrency:
-      group: package-snapshots-${{ github.event.workflow_run.head_sha || github.sha }}
+      group: package-releases-${{ github.event.workflow_run.head_sha || github.sha }}-${{ inputs.official_release || false }}
       cancel-in-progress: false
 
     steps:
@@ -47,40 +54,47 @@ jobs:
       - name: Checkout shallow submodules
         run: git submodule update --init --recursive --depth 1
 
-      - name: Build runtime package
+      - name: Build release package
         shell: pwsh
-        run: ./publish.ps1 -OfficialBuild $true
+        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE))
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: snapshot-package
+          name: release-package
           path: publish/**/OIV-*
           if-no-files-found: error
           retention-days: 7
 
   publish-release:
-    name: Publish snapshot release
+    name: Publish release
     needs: build-package
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.official_release && 'official-release' || 'snapshot-release' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       actions: read
       contents: write
     concurrency:
-      group: publish-snapshots-${{ github.event.workflow_run.head_sha || github.sha }}
+      group: publish-releases-${{ github.event.workflow_run.head_sha || github.sha }}-${{ inputs.official_release || false }}
       cancel-in-progress: false
     env:
-      RELEASE_REPOSITORY: ${{ github.event.repository.fork && github.repository || format('{0}/snapshots', github.repository_owner) }}
-      RELEASE_TAG: snapshot-${{ github.event.workflow_run.head_sha || github.sha }}
-      RELEASE_TARGET: ${{ github.event.repository.fork && (github.event.workflow_run.head_sha || github.sha) || '' }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
 
     steps:
+      - name: Checkout release tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Download package artifact
         uses: actions/download-artifact@v4
         with:
-          name: snapshot-package
-          path: snapshot-package
+          name: release-package
+          path: release-package
 
       - name: Select downloaded archives
         id: package
@@ -88,7 +102,7 @@ jobs:
         run: |
           $archivePattern = '^OIV-.+(?:\.[^.]+)+$'
           $symbolsPattern = '-Symbols(?:\.[^.]+)+$'
-          $archives = @(Get-ChildItem -Path "snapshot-package" -Recurse -File | Where-Object { $_.Name -match $archivePattern })
+          $archives = @(Get-ChildItem -Path "release-package" -Recurse -File | Where-Object { $_.Name -match $archivePattern })
           $runtimeArchives = @($archives | Where-Object { $_.Name -notmatch $symbolsPattern })
           $symbolsArchives = @($archives | Where-Object { $_.Name -match $symbolsPattern })
 
@@ -104,75 +118,53 @@ jobs:
 
           $runtimeArchive = $runtimeArchives[0]
           $symbolsArchive = $symbolsArchives[0]
-          $titlePattern = '^(?<title>OIV-\d+(?:\.\d+)+-[0-9a-f]+)(?:-.+)?(?:\.[^.]+)+$'
+          $officialRelease = [bool]::Parse($env:OFFICIAL_RELEASE)
+          $titlePattern = if ($officialRelease) {
+              '^(?<title>OIV-\d+\.\d+\.\d+)-.+(?:\.[^.]+)+$'
+          } else {
+              '^(?<title>OIV-\d+\.\d+\.\d+\.\d+)-[0-9a-f]+-.+(?:\.[^.]+)+$'
+          }
           if ($runtimeArchive.Name -notmatch $titlePattern) {
-              throw "Runtime archive name '$($runtimeArchive.Name)' does not contain an OIV version and commit prefix."
+              throw "Runtime archive name '$($runtimeArchive.Name)' does not match the selected release mode."
           }
 
           $releaseTitle = $Matches.title
+          if ($symbolsArchive.Name -notmatch $titlePattern) {
+              throw "Symbols archive name '$($symbolsArchive.Name)' does not match the selected release mode."
+          }
+          if ($Matches.title -ne $releaseTitle) {
+              throw "Runtime and symbols archive versions do not match: '$($runtimeArchive.Name)', '$($symbolsArchive.Name)'."
+          }
+          $releaseTag = if ($officialRelease) { $releaseTitle } else { "snapshots/$releaseTitle" }
+          $prerelease = (-not $officialRelease).ToString().ToLowerInvariant()
+
           "runtime_archive_path=$($runtimeArchive.FullName)" >> $env:GITHUB_OUTPUT
           "runtime_archive_name=$($runtimeArchive.Name)" >> $env:GITHUB_OUTPUT
           "symbols_archive_path=$($symbolsArchive.FullName)" >> $env:GITHUB_OUTPUT
           "symbols_archive_name=$($symbolsArchive.Name)" >> $env:GITHUB_OUTPUT
           "release_title=$releaseTitle" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
           "Selected runtime archive $($runtimeArchive.FullName)"
           "Selected symbols archive $($symbolsArchive.FullName)"
           "Release title $releaseTitle"
 
-      - name: Publish snapshot release
+      - name: Publish release
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.event.repository.fork && github.token || secrets.SNAPSHOTS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.package.outputs.release_tag }}
+          RELEASE_TARGET: ${{ env.PUBLISH_SHA }}
           RELEASE_TITLE: ${{ steps.package.outputs.release_title }}
+          PRERELEASE: ${{ steps.package.outputs.prerelease }}
           RUNTIME_ARCHIVE_PATH: ${{ steps.package.outputs.runtime_archive_path }}
-          RUNTIME_ARCHIVE_NAME: ${{ steps.package.outputs.runtime_archive_name }}
           SYMBOLS_ARCHIVE_PATH: ${{ steps.package.outputs.symbols_archive_path }}
-          SYMBOLS_ARCHIVE_NAME: ${{ steps.package.outputs.symbols_archive_name }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
-              $PSNativeCommandUseErrorActionPreference = $true
-          }
-
-          if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
-              throw "Release token is not configured."
-          }
-
-          $notes = "Source commit: $env:PUBLISH_SHA"
-
-          $releaseExists = $true
-          try {
-              gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY *> $null
-          } catch {
-              $releaseExists = $false
-          }
-
-          if (-not $releaseExists) {
-              $createArgs = @(
-                  "release", "create", $env:RELEASE_TAG,
-                  "--repo", $env:RELEASE_REPOSITORY,
-                  "--title", $env:RELEASE_TITLE,
-                  "--notes", $notes,
-                  "--prerelease"
-              )
-              if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TARGET)) {
-                  $createArgs += @("--target", $env:RELEASE_TARGET)
-              }
-              gh @createArgs
-          } else {
-              gh release edit $env:RELEASE_TAG `
-                  --repo $env:RELEASE_REPOSITORY `
-                  --title $env:RELEASE_TITLE `
-                  --notes $notes `
-                  --prerelease
-
-              $release = gh release view $env:RELEASE_TAG --repo $env:RELEASE_REPOSITORY --json assets | ConvertFrom-Json
-              foreach ($asset in @($release.assets)) {
-                  gh release delete-asset $env:RELEASE_TAG $asset.name --repo $env:RELEASE_REPOSITORY --yes
-              }
-          }
-
-          gh release upload $env:RELEASE_TAG $env:RUNTIME_ARCHIVE_PATH $env:SYMBOLS_ARCHIVE_PATH `
-              --repo $env:RELEASE_REPOSITORY
-
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Published snapshot assets to $env:RELEASE_REPOSITORY release '$env:RELEASE_TAG' for $env:PUBLISH_SHA: $env:RUNTIME_ARCHIVE_NAME, $env:SYMBOLS_ARCHIVE_NAME."
+        run: >
+          ./.github/scripts/Publish-GitHubRelease.ps1
+          -Repository $env:RELEASE_REPOSITORY
+          -Tag $env:RELEASE_TAG
+          -TargetSha $env:RELEASE_TARGET
+          -Title $env:RELEASE_TITLE
+          -Prerelease ([bool]::Parse($env:PRERELEASE))
+          -RuntimeArchive $env:RUNTIME_ARCHIVE_PATH
+          -SymbolsArchive $env:SYMBOLS_ARCHIVE_PATH
