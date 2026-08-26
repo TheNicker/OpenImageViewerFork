@@ -109,8 +109,19 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zo>)    #Enhance Optimized Debugging
         add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zi>)    #seperate debug information
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-flto>) #link time optimization code generation
-        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fwhole-program-vtables>)
+        if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT MATCHES "MSVC")
+            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-flto>)
+            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fwhole-program-vtables>)
+        else()
+            include(CheckIPOSupported)
+            check_ipo_supported(RESULT OIV_IPO_SUPPORTED OUTPUT OIV_IPO_ERROR)
+            if (OIV_IPO_SUPPORTED)
+                set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+                add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fwhole-program-vtables>)
+            else()
+                message(WARNING "Interprocedural optimization is unavailable: ${OIV_IPO_ERROR}")
+            endif()
+        endif()
         # fstrict-vtable-pointers and fstrict-enums don't seems to be supported in clang-cl 16
         if (${CMAKE_CXX_COMPILER_VERSION} GREATER_EQUAL "16" AND NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT MATCHES "MSVC")
             add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fstrict-vtable-pointers>)    
