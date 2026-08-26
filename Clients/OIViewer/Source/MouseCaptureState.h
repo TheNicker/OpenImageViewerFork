@@ -2,7 +2,6 @@
 
 #include <LInput/Buttons/ButtonStates.h>
 #include <LInput/Mouse/MouseButton.h>
-#include <LInput/Win32/RawInput/RawInput.h>
 
 #include <array>
 #include <cstddef>
@@ -12,6 +11,7 @@ namespace OIV
     class MouseCaptureState
     {
       public:
+
         void Update(LInput::MouseButton button, LInput::ButtonState state, bool mouseUnderWindow)
         {
             const size_t index = static_cast<size_t>(button);
@@ -21,12 +21,10 @@ namespace OIV
                 fCapturedButtons[index] = false;
         }
 
-        bool IsCaptured(LInput::MouseButton button) const
-        {
-            return fCapturedButtons.at(static_cast<size_t>(button));
-        }
+        bool IsCaptured(LInput::MouseButton button) const { return fCapturedButtons.at(static_cast<size_t>(button)); }
 
       private:
-        std::array<bool, LInput::RawInput::MaxMouseButtons> fCapturedButtons{};
+
+        std::array<bool, static_cast<size_t>(LInput::MouseButton::Count)> fCapturedButtons{};
     };
 }  // namespace OIV

@@ -20,9 +20,11 @@
 #include <OIVAppCore/ImageLoadPresentationPolicy.h>
 #include <OIVAppCore/InputGesturePolicy.h>
 #include <OIVAppCore/IFileWatcher.h>
+#include <OIVAppCore/MessageFormatter.h>
 #include <OIVAppCore/SelectionRect.h>
 #include <OIVAppCore/SelectionWorkflowPolicy.h>
 #include <OIVAppCore/SequencerPolicy.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include <OIVAppCore/SlideshowPolicy.h>
 #include <OIVAppCore/SortCommandPolicy.h>
 #include <OIVAppCore/SubImagePolicy.h>
@@ -445,8 +447,9 @@ TEST_CASE("ViewerPresentationPolicy formats viewer messages", "[AppCore]")
                                                                  titleFolder.native(), true, 3,
                                                                  10) == expectedFileTitlePrefix);
     REQUIRE(OIV::ViewerPresentationPolicy::FormatFileTitlePrefix(LLUTILS_TEXT("image"), LLUTILS_TEXT(".png"),
-                                                                 titleFolder.native() + std::filesystem::path::preferred_separator, true,
-                                                                 3, 10) == expectedFileTitlePrefix);
+                                                                 titleFolder.native() +
+                                                                     std::filesystem::path::preferred_separator,
+                                                                 true, 3, 10) == expectedFileTitlePrefix);
     REQUIRE(OIV::ViewerPresentationPolicy::FormatTitle(LLUTILS_TEXT("image - "), LLUTILS_TEXT("OpenImageViewer")) ==
             LLUTILS_TEXT("image - OpenImageViewer"));
 }
@@ -1973,4 +1976,33 @@ TEST_CASE("ImageOpenController routes folders to file session", "[AppCore]")
                                                                IMCodec::PluginTraverseMode::NoTraverse, {});
 
     REQUIRE(emptyFolderResult.status == OIV::ImageLoadStatus::NoSupportedFiles);
+}
+
+TEST_CASE("MessageFormatter uses native strings for text and paths", "[AppCore]")
+{
+    OIV::MessageFormatter::FormatArgs args;
+    args.keyColor          = {};
+    args.valueColor        = {};
+    args.minSpaceFromValue = 1;
+    args.messageValues.emplace_back("Key", OIV::MessageFormatter::ValueObjectList{
+                                               OIV::MessageFormatter::ValueObject(LLUTILS_TEXT("Value"))});
+
+    REQUIRE(OIV::MessageFormatter::FormatMetaText(args) == LLUTILS_TEXT("Key Value"));
+    REQUIRE(OIV::MessageFormatter::FormatMetaText({}).empty());
+    REQUIRE(OIV::MessageFormatter::FormatTexelInfo(IMCodec::GetTexelInfo(IMCodec::TexelFormat::UNKNOWN)).empty());
+    REQUIRE(OIV::MessageFormatter::FormatValueObject(OIV::MessageFormatter::ValueObject(std::string("narrow text"))) ==
+            LLUTILS_TEXT("narrow text"));
+
+    const std::filesystem::path path = std::filesystem::path("images") / "cat.png";
+    const auto decomposed            = OIV::MessageFormatter::DecomposePath(path);
+    REQUIRE(decomposed.fileName == std::filesystem::path("cat").native());
+    REQUIRE(decomposed.extension == std::filesystem::path(".png").native());
+    REQUIRE(decomposed.parentPath.ends_with(std::filesystem::path::preferred_separator));
+}
+
+TEST_CASE("ShellIntegrationHelper produces viewer command placement", "[AppCore]")
+{
+    const LLUtils::RectI32 iconRect{{10, 20}, {30, 40}};
+    REQUIRE(OIV::ShellIntegrationHelper::TrayContextMenuPosition(iconRect) == (LLUtils::PointI32{40, 30}));
+    REQUIRE(OIV::ShellIntegrationHelper::ViewCommandArgsFromTrayItem(LLUTILS_TEXT("Quit")) == "type=quit");
 }

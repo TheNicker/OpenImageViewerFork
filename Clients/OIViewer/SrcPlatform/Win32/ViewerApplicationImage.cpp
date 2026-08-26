@@ -28,10 +28,11 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageFormatter.h>
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "Win32/UserMessages.h"
@@ -44,7 +45,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -209,15 +210,15 @@ namespace OIV
         }
 
         bitmapBuffer.pixels = std::span<const std::byte>(colorBuffer.data(), colorBuffer.size());
-        maskBuffer.pixels = std::span<const std::byte>(maskPixelsBuffer.data(), maskPixelsBuffer.size());
+        maskBuffer.pixels   = std::span<const std::byte>(maskPixelsBuffer.data(), maskPixelsBuffer.size());
 
         LLUtils::native_stringstream ss;
-        ss << imageSlot + 1 << L'/' << totalImages << LLUTILS_TEXT("  ") << bitmapBuffer.width << LLUTILS_TEXT(" x ") << bitmapBuffer.height
-           << LLUTILS_TEXT(" x ") << bitmapBuffer.bitsPerPixel << LLUTILS_TEXT(" BPP");
+        ss << imageSlot + 1 << L'/' << totalImages << LLUTILS_TEXT("  ") << bitmapBuffer.width << LLUTILS_TEXT(" x ")
+           << bitmapBuffer.height << LLUTILS_TEXT(" x ") << bitmapBuffer.bitsPerPixel << LLUTILS_TEXT(" BPP");
 
-        fWindow.GetImageControl().GetImageList().SetImage(
-            {imageSlot, ss.str(), std::make_shared<LWS::Bitmap>(bitmapBuffer),
-             std::make_shared<LWS::Bitmap>(maskBuffer)});
+        fWindow.GetImageControl().GetImageList().SetImage({imageSlot, ss.str(),
+                                                           std::make_shared<LWS::Bitmap>(bitmapBuffer),
+                                                           std::make_shared<LWS::Bitmap>(maskBuffer)});
     }
 
     bool ViewerApplication::IsSubImagesVisible() const
@@ -288,7 +289,8 @@ namespace OIV
         if (loadResult.status == ImageLoadStatus::NoSupportedFiles)
             return false;
 
-        auto formattedFilePath = MessageFormatter::FormatFilePath(loadResult.normalizedPath) + LLUTILS_TEXT("<textcolor=#ff8930>");
+        auto formattedFilePath                   = MessageFormatter::FormatFilePath(loadResult.normalizedPath) +
+                                                   LLUTILS_TEXT("<textcolor=#ff8930>");
         const ImageLoadPresentation presentation = ImageLoadPresentationPolicy::Decide(loadResult, formattedFilePath);
 
         if (presentation.shouldLoadImage)
@@ -550,7 +552,8 @@ namespace OIV
         }
     }
 
-    void ViewerApplication::OnFileIndexResidencyReady(const LLUtils::native_string_type& fileName, IMCodec::ImageSharedPtr image)
+    void ViewerApplication::OnFileIndexResidencyReady(const LLUtils::native_string_type& fileName,
+                                                      IMCodec::ImageSharedPtr image)
     {
         if (fBrowseSessionController == nullptr || !fBrowseSessionController->IsCurrentFile(fileName))
         {
@@ -927,7 +930,7 @@ namespace OIV
             int mbResult = MessageBox(reinterpret_cast<HWND>(fWindow.GetHandle()),
                                       (LLUTILS_TEXT("Reload the file: "s) + requestedFile).c_str(),
                                       LLUTILS_TEXT("File is changed outside of OIV"), MB_YESNO);
-            action = fFileReloadPolicy.ConfirmReload(mbResult == IDYES);
+            action       = fFileReloadPolicy.ConfirmReload(mbResult == IDYES);
         }
 
         if (action == ReloadAction::RequestNow && fBrowseSessionController != nullptr)
@@ -940,12 +943,12 @@ namespace OIV
                            GetOpenedFileName());
     }
 
-    bool ViewerApplication::LoadFileOrFolder(const LLUtils::native_string_type& filePath, IMCodec::PluginTraverseMode traverseMode)
+    bool ViewerApplication::LoadFileOrFolder(const LLUtils::native_string_type& filePath,
+                                             IMCodec::PluginTraverseMode traverseMode)
     {
         const auto clientSize = fWindow.GetClientSize();
         return ProcessImageLoadResult(fImageOpenController->LoadFileOrFolder(
-            filePath, traverseMode,
-            ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
+            filePath, traverseMode, ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
     }
 
     void ViewerApplication::CountColorsAsync()

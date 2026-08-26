@@ -125,12 +125,11 @@ ImageUtil
 oiv
 oivappcore
 oivshared
+LWSLib
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
      target_link_libraries(${TargetName}
-     #local libraries
-     LWSLib
      #system libraries
      kernel32.lib
      user32.lib

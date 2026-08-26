@@ -2,8 +2,7 @@
 
 #include "OIVCommands.h"
 
-#include <Windows.h>
-
+#include <cstddef>
 #include <cstdint>
 
 namespace OIV
@@ -11,40 +10,30 @@ namespace OIV
     class IViewerRenderPort
     {
       public:
+
         virtual ~IViewerRenderPort() = default;
 
-        virtual void Initialize(HANDLE canvasHandle) = 0;
-        virtual ResultCode Refresh() = 0;
-        virtual void SetSelectionRect(const LLUtils::RectI32& rect) = 0;
-        virtual void ClearSelectionRect() = 0;
-        virtual ResultCode SetColorExposure(const OIV_CMD_ColorExposure_Request& exposure) = 0;
-        virtual ResultCode SetTexelGrid(const CmdRequestTexelGrid& grid) = 0;
-        virtual ResultCode SetClientSize(uint16_t width, uint16_t height) = 0;
+        virtual void Initialize(std::size_t canvasHandle)                                        = 0;
+        virtual ResultCode Refresh()                                                             = 0;
+        virtual void SetSelectionRect(const LLUtils::RectI32& rect)                              = 0;
+        virtual void ClearSelectionRect()                                                        = 0;
+        virtual ResultCode SetColorExposure(const OIV_CMD_ColorExposure_Request& exposure)       = 0;
+        virtual ResultCode SetTexelGrid(const CmdRequestTexelGrid& grid)                         = 0;
+        virtual ResultCode SetClientSize(uint16_t width, uint16_t height)                        = 0;
         virtual ResultCode RegisterCallbacks(const OIV_CMD_RegisterCallbacks_Request& callbacks) = 0;
     };
 
     class OivRenderGateway final : public IViewerRenderPort
     {
       public:
-        void Initialize(HANDLE canvasHandle) override
-        {
-            OIVCommands::Init(canvasHandle);
-        }
 
-        ResultCode Refresh() override
-        {
-            return OIVCommands::Refresh();
-        }
+        void Initialize(std::size_t canvasHandle) override { OIVCommands::Init(canvasHandle); }
 
-        void SetSelectionRect(const LLUtils::RectI32& rect) override
-        {
-            OIVCommands::SetSelectionRect(rect);
-        }
+        ResultCode Refresh() override { return OIVCommands::Refresh(); }
 
-        void ClearSelectionRect() override
-        {
-            OIVCommands::CancelSelectionRect();
-        }
+        void SetSelectionRect(const LLUtils::RectI32& rect) override { OIVCommands::SetSelectionRect(rect); }
+
+        void ClearSelectionRect() override { OIVCommands::CancelSelectionRect(); }
 
         ResultCode SetColorExposure(const OIV_CMD_ColorExposure_Request& exposure) override
         {

@@ -27,10 +27,10 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "Win32/UserMessages.h"
@@ -43,7 +43,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -144,8 +144,9 @@ namespace OIV
     {
         fShowBorders = !fShowBorders;
         {
-            fWindow.SetWindowStyles(
-                LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton | LWS::WindowStyle::MinimizeButton, fShowBorders);
+            fWindow.SetWindowStyles(LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton |
+                                        LWS::WindowStyle::MinimizeButton,
+                                    fShowBorders);
         }
     }
 
@@ -426,9 +427,9 @@ namespace OIV
                 PointF64 storageImageSpace = ClientToImage(fWindow.GetMousePosition());
 
                 LLUtils::native_stringstream ss;
-                ss << LLUTILS_TEXT("Texel: ") << std::fixed << std::setprecision(1) << std::setfill(L' ') << std::setw(6)
-                   << storageImageSpace.x << LLUTILS_TEXT(" X ") << std::fixed << std::setprecision(1) << std::setfill(L' ')
-                   << std::setw(6) << storageImageSpace.y;
+                ss << LLUTILS_TEXT("Texel: ") << std::fixed << std::setprecision(1) << std::setfill(L' ')
+                   << std::setw(6) << storageImageSpace.x << LLUTILS_TEXT(" X ") << std::fixed << std::setprecision(1)
+                   << std::setfill(L' ') << std::setw(6) << storageImageSpace.y;
                 fVirtualStatusBar.SetText("texelPos", ss.str());
 
                 // fWindow.SetStatusBarText(ss.str(), 2, 0);
