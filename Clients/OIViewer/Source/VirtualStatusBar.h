@@ -1,62 +1,66 @@
 #pragma once
-#include "Helpers/OIVHelper.h"
+
 #include "LabelManager.h"
+
+#include <functional>
+#include <map>
+#include <string>
 
 namespace OIV
 {
     class VirtualStatusBar
     {
-    public:
+      public:
+
         using RefreshCallback = std::function<void()>;
-        
 
         VirtualStatusBar(LabelManager* labelManager, RefreshCallback callback)
         {
-            fLabelManager = labelManager;
+            fLabelManager    = labelManager;
             fRefreshCallback = callback;
         }
 
-		OIVTextImage* GetOrCreateLabel(const std::string& labelName)
-		{
-			auto label = fMapLabels.find(labelName);
-			if (label == fMapLabels.end())
-			{
-				OIVTextImage* texelValue = fLabelManager->GetOrCreateTextLabel(labelName);
+        OIVTextImage* GetOrCreateLabel(const std::string& labelName)
+        {
+            auto label = fMapLabels.find(labelName);
+            if (label == fMapLabels.end())
+            {
+                OIVTextImage* texelValue = fLabelManager->GetOrCreateTextLabel(labelName);
                 texelValue->SetVisible(fVisible);
                 texelValue->SetBackgroundColor(LLUtils::Color(0, 0, 0, 192));
                 texelValue->SetFontPath(LabelManager::sFixedFontPath);
                 texelValue->SetLineEndFixedWidth(true);
                 texelValue->SetTextRenderMode(FreeType::RenderMode::Antialiased);
                 texelValue->SetFontSize(11);
-                texelValue->SetTextColor({ 170,170,170,255 });
+                texelValue->SetTextColor({170, 170, 170, 255});
                 texelValue->SetOutlineWidth(0);
-				label = fMapLabels.emplace(labelName, texelValue).first;
-			}
+                label = fMapLabels.emplace(labelName, texelValue).first;
+            }
 
-			return label->second;
-		}
-
+            return label->second;
+        }
 
         void RepositionLabels()
         {
             const LLUtils::PointF64 sizef = static_cast<LLUtils::PointF64>(fClientSize);
-            
-            for (auto [name,text] : fMapLabels)
+
+            for (auto [name, text] : fMapLabels)
             {
                 // labels placement logic, currently hard coded.
-                //TOOD: make it dynamic
+                // TOOD: make it dynamic
                 if (text->GetImage() == nullptr)
                     text->Create();
 
-                if (text->GetImage() != nullptr &&  text->GetOpacity() > 0.0 && text->GetVisible() ) // if visible
+                if (text->GetImage() != nullptr && text->GetOpacity() > 0.0 && text->GetVisible())  // if visible
                 {
                     if (name == "texelValue")
-                        text->SetPosition({ sizef.x - text->GetImage()->GetWidth() - 10 ,sizef.y - text->GetImage()->GetHeight() - 5 });
+                        text->SetPosition(
+                            {sizef.x - text->GetImage()->GetWidth() - 10, sizef.y - text->GetImage()->GetHeight() - 5});
                     else if (name == "imageDescription")
-                        text->SetPosition({ 10 ,sizef.y - text->GetImage()->GetHeight()- 5 });
+                        text->SetPosition({10, sizef.y - text->GetImage()->GetHeight() - 5});
                     else if (name == "texelPos")
-                        text->SetPosition({ (sizef.x - text->GetImage()->GetWidth()) / 2  ,sizef.y - text->GetImage()->GetHeight()- 5 });
-
+                        text->SetPosition({(sizef.x - text->GetImage()->GetWidth()) / 2,
+                                           sizef.y - text->GetImage()->GetHeight() - 5});
                 }
             }
 
@@ -77,14 +81,11 @@ namespace OIV
 
             if (GetVisible())
             {
-                RepositionLabels(); // size of text is most likely changed - reposition.
+                RepositionLabels();  // size of text is most likely changed - reposition.
             }
         }
 
-        bool GetVisible() const
-        {
-            return fVisible;
-        }
+        bool GetVisible() const { return fVisible; }
 
         void SetVisible(bool visible)
         {
@@ -117,13 +118,12 @@ namespace OIV
             return false;
         }
 
-    private:
+      private:
 
         LLUtils::PointI32 fClientSize = LLUtils::PointI32::Zero;
         std::map<std::string, OIVTextImage*> fMapLabels;
         LabelManager* fLabelManager;
         RefreshCallback fRefreshCallback;
         bool fVisible = false;
-
     };
-}
+}  // namespace OIV

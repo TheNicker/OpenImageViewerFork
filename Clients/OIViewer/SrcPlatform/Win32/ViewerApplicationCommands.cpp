@@ -27,10 +27,10 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "Win32/UserMessages.h"
@@ -43,7 +43,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -96,7 +96,8 @@ namespace OIV
         if (type == "toggleBorders")
         {
             ToggleBorders();
-            result.resValue = LLUtils::native_string_type(LLUTILS_TEXT("Borders ")) + (fShowBorders == true ? LLUTILS_TEXT("On") : LLUTILS_TEXT("Off"));
+            result.resValue = LLUtils::native_string_type(LLUTILS_TEXT("Borders ")) +
+                              (fShowBorders == true ? LLUTILS_TEXT("On") : LLUTILS_TEXT("Off"));
         }
         else if (type == "quit")
         {
@@ -207,8 +208,8 @@ namespace OIV
                 default:
                     LL_EXCEPTION_UNEXPECTED_VALUE;
             }
-            result.resValue = DefaultTextKeyColorTag + LLUTILS_TEXT("Downscaling technique: ") + DefaultTextValueColorTag +
-                              downscaleTechnique;
+            result.resValue = DefaultTextKeyColorTag + LLUTILS_TEXT("Downscaling technique: ") +
+                              DefaultTextValueColorTag + downscaleTechnique;
 
             SetDownScalingTechnique(technique);
         }
@@ -332,8 +333,9 @@ namespace OIV
                 }
 
                 auto result = LWS::FileDialog::Show(LWS::FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
-                                               LLUTILS_TEXT("Save an image"), fWindow.GetHandle(), LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
-                                               fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
+                                                    LLUTILS_TEXT("Save an image"), fWindow.GetHandle(),
+                                                    LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
+                                                    fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
 
                 if (result == LWS::FileDialogResult::Success)
                 {
@@ -361,8 +363,9 @@ namespace OIV
         else
         {
             LLUtils::native_string_type openFilePath;
-            auto result = LWS::FileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(), LLUTILS_TEXT("Open image"),
-                                           fWindow.GetHandle(), {}, 0, {}, openFilePath);
+            auto result = LWS::FileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(),
+                                                LLUTILS_TEXT("Open image"), fWindow.GetHandle(), {}, 0, {},
+                                                openFilePath);
 
             if (result == LWS::FileDialogResult::Success)
                 LoadFile(openFilePath, IMCodec::PluginTraverseMode::NoTraverse);
@@ -405,9 +408,8 @@ namespace OIV
                                              .top    = workAreaTopLeft.y,
                                              .right  = workAreaBottomRight.x,
                                              .bottom = workAreaBottomRight.y};
-        const WindowSizeDecision decision = ViewCommandPolicy::DecideWindowSize(
-            request.args, fWindow.GetWindowSize(), fWindow.GetPosition(),
-            workArea);
+        const WindowSizeDecision decision = ViewCommandPolicy::DecideWindowSize(request.args, fWindow.GetWindowSize(),
+                                                                                fWindow.GetPosition(), workArea);
 
         switch (decision.mode)
         {
@@ -563,7 +565,8 @@ namespace OIV
         {
             OperationResult res = CopyVisibleToClipBoard();
             if (res != OperationResult::Success)
-                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(LLUTILS_TEXT("Cannot copy to clipboard"), res);
+                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
+                    LLUTILS_TEXT("Cannot copy to clipboard"), res);
             else
                 result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
         }
@@ -571,7 +574,8 @@ namespace OIV
         {
             OperationResult res = CutSelectedArea();
             if (res != OperationResult::Success)
-                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(LLUTILS_TEXT("Cannot cut selected area"), res);
+                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
+                    LLUTILS_TEXT("Cannot cut selected area"), res);
             else
                 result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
         }
@@ -603,7 +607,8 @@ namespace OIV
         {
             OperationResult res = CropVisibleImage();
             if (res != OperationResult::Success)
-                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(LLUTILS_TEXT("Cannot crop selected area"), res);
+                result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
+                    LLUTILS_TEXT("Cannot crop selected area"), res);
             else
                 result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
         }

@@ -28,10 +28,10 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "OIVCommands.h"
@@ -43,7 +43,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -122,6 +122,10 @@ namespace OIV
                                 });
         }
 
+        // TODO: Restore the intended startup geometry through an explicit cross-platform WindowConfig. OIViewer
+        // should provide its initial client size and styles; LWS should distinguish platform-default from explicit
+        // positioning, map the former to CW_USEDEFAULT on Win32, and derive the frame size with
+        // AdjustWindowRectExForDpi.
         // initialize the windowing system of the window
         fWindow.Create();
         fWindow.SetMenuChar(false);
@@ -142,7 +146,7 @@ namespace OIV
                                     true);
         }
 
-        AutoScroll::CreateParams params = {reinterpret_cast<HWND>(fWindow.GetHandle()),
+        AutoScroll::CreateParams params = {&fWindow,
                                            std::bind(&ViewerApplication::OnScroll, this, std::placeholders::_1)};
         fAutoScroll                     = std::make_unique<AutoScroll>(params);
 
@@ -199,10 +203,10 @@ namespace OIV
                 RefreshImage();
             });
 
-        fMessageManager = std::make_unique<MessageManager>(reinterpret_cast<HWND>(fWindow.GetHandle()), &fLabelManager, 5,
+        fMessageManager = std::make_unique<MessageManager>(fWindow.GetHandle(), &fLabelManager, 5,
                                                            [&]() -> void { fRefreshOperation.Queue(); });
 
-        fRenderGateway.Initialize(fWindow.GetCanvasHandle());
+        fRenderGateway.Initialize(fWindow.GetCanvasWindow().GetHandle());
 
         // Update oiv lib client size
         UpdateWindowSize();
@@ -223,8 +227,7 @@ namespace OIV
         if (isInitialFileProvided && !isInitialFileExists)
         {
             using namespace std::string_literals;
-            SetUserMessage(LLUTILS_TEXT("Can not load the file: "s) + filePath +
-                               LLUTILS_TEXT(", it doesn't exist"s),
+            SetUserMessage(LLUTILS_TEXT("Can not load the file: "s) + filePath + LLUTILS_TEXT(", it doesn't exist"s),
                            static_cast<GroupID>(UserMessageGroups::FailedFileLoad), MessageFlags::Persistent);
         }
 
@@ -494,12 +497,12 @@ namespace OIV
         }
         else [[unlikely]]
         {
-            const auto primaryMonitor      = LWS::Platform::getPrimaryMonitor(false).monitorRect;
-            const auto boundingArea        = LWS::Platform::getBoundingMonitorArea();
-            const auto primaryMonitorP0    = primaryMonitor.GetCorner(TopLeft);
-            const auto boundingAreaP0      = boundingArea.GetCorner(TopLeft);
+            const auto primaryMonitor   = LWS::Platform::getPrimaryMonitor(false).monitorRect;
+            const auto boundingArea     = LWS::Platform::getBoundingMonitorArea();
+            const auto primaryMonitorP0 = primaryMonitor.GetCorner(TopLeft);
+            const auto boundingAreaP0   = boundingArea.GetCorner(TopLeft);
 
-            using point_type = PointF64::point_type;
+            using point_type     = PointF64::point_type;
             const auto leftDelta = primaryMonitorP0.x - boundingAreaP0.x;
             const auto topDelta  = primaryMonitorP0.y - boundingAreaP0.y;
 

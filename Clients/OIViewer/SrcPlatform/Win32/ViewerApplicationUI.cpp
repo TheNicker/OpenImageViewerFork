@@ -28,10 +28,11 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageFormatter.h>
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "Win32/UserMessages.h"
@@ -44,7 +45,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -160,13 +161,15 @@ namespace OIV
                 }
                 else
                 {
-                    LLUtils::Logger::GetSingleton().Log(LLUtils::native_string_type(LLUTILS_TEXT("Cannot load Netsettings extension, error: ")) +
-                                                        LLUtils::PlatformUtility::GetLastErrorAsString<wchar_t>());
+                    LLUtils::Logger::GetSingleton().Log(
+                        LLUtils::native_string_type(LLUTILS_TEXT("Cannot load Netsettings extension, error: ")) +
+                        LLUtils::PlatformUtility::GetLastErrorAsString<wchar_t>());
                 }
             }
             else
             {
-                LLUtils::Logger::GetSingleton().Log(LLUtils::native_string_type(LLUTILS_TEXT("Cannot load Netsettings extension, not found")));
+                LLUtils::Logger::GetSingleton().Log(
+                    LLUtils::native_string_type(LLUTILS_TEXT("Cannot load Netsettings extension, not found")));
             }
         }
         else
@@ -185,14 +188,19 @@ namespace OIV
                                             LLUtils::native_string_type seperatedCallStack)
     {
         LLUtils::native_stringstream ss;
-        LLUtils::native_string_type source          = isFromLibrary ? LLUTILS_TEXT("OIV library") : LLUTILS_TEXT("OIV viewer");
-        const LLUtils::native_string_type introMessage   = LLUtils::Exception::ExceptionErrorCodeToString(args.errorCode) +
-                                       LLUTILS_TEXT(" exception has occured at ") + args.functionName + LLUTILS_TEXT(" at ") + source +
-                                       LLUTILS_TEXT(".\nDescription: ") + args.description;
-        const LLUtils::native_string_type displayMessage = introMessage + LLUTILS_TEXT("\nPlease refer to the log file [") + mLogFile.GetLogPath() +
-                                       LLUTILS_TEXT("] for more information");
+        LLUtils::native_string_type source = isFromLibrary ? LLUTILS_TEXT("OIV library") : LLUTILS_TEXT("OIV viewer");
+        const LLUtils::native_string_type introMessage   = LLUtils::Exception::ExceptionErrorCodeToString(
+                                                               args.errorCode) +
+                                                           LLUTILS_TEXT(" exception has occured at ") +
+                                                           args.functionName + LLUTILS_TEXT(" at ") + source +
+                                                           LLUTILS_TEXT(".\nDescription: ") + args.description;
+        const LLUtils::native_string_type displayMessage = introMessage +
+                                                           LLUTILS_TEXT("\nPlease refer to the log file [") +
+                                                           mLogFile.GetLogPath() +
+                                                           LLUTILS_TEXT("] for more information");
 
-        ss << LLUTILS_TEXT("\n==================================================================================================\n");
+        ss << LLUTILS_TEXT(
+            "\n==================================================================================================\n");
         ss << introMessage << std::endl;
 
         if (args.systemErrorMessage.empty() == false)
@@ -238,7 +246,8 @@ namespace OIV
     //, fFileCache(&fImageLoader, std::bind(&ViewerApplication::OnImageReady, this, std::placeholders::_1))
 
     {
-        fCommandController.SetResultSink([this](const LLUtils::native_string_type& message) { SetUserMessage(message); });
+        fCommandController.SetResultSink([this](const LLUtils::native_string_type& message)
+                                         { SetUserMessage(message); });
 
         // LLUtils::Exception::SetThrowErrorsInDebug(false);
         EventManager::GetSingleton().MonitorChange.Add(
@@ -280,9 +289,8 @@ namespace OIV
         fCurrentMonitorProperties = params.monitorDesc;
 
         // update the refresh rate.
-        fRefreshRateTimes1000 = params.monitorDesc.displayFrequency == 59
-                                    ? 59940
-                                    : params.monitorDesc.displayFrequency * 1000;
+        fRefreshRateTimes1000 = params.monitorDesc.displayFrequency == 59 ? 59940
+                                                                          : params.monitorDesc.displayFrequency * 1000;
 
         const LLUtils::PointF64 BaseDPI{96.0, 96.0};
 
@@ -440,7 +448,8 @@ namespace OIV
         }
     }
 
-    void ViewerApplication::OnSettingChange(const LLUtils::native_string_type& key, const LLUtils::native_string_type& value)
+    void ViewerApplication::OnSettingChange(const LLUtils::native_string_type& key,
+                                            const LLUtils::native_string_type& value)
     {
         const AppSettingsPolicy::Action action = AppSettingsPolicy::ParseAction(key, value);
 
@@ -523,7 +532,8 @@ namespace OIV
         switch (args.action)
         {
             case LWS::NotificationIconGroup::NotificationIconAction::Select:
-                if (fWindow.GetVisible() == false || fWindow.GetWindowDisplayState() == LWS::WindowDisplayState::Minimized)
+                if (fWindow.GetVisible() == false ||
+                    fWindow.GetWindowDisplayState() == LWS::WindowDisplayState::Minimized)
                 {
                     fWindow.SetVisible(true);
                     fWindow.SetWindowDisplayState(LWS::WindowDisplayState::Restored);
@@ -557,7 +567,8 @@ namespace OIV
         }
     }
 
-    void ViewerApplication::SetUserMessage(const LLUtils::native_string_type& message, GroupID groupID, MessageFlags groupFlags)
+    void ViewerApplication::SetUserMessage(const LLUtils::native_string_type& message, GroupID groupID,
+                                           MessageFlags groupFlags)
     {
         fMessageManager->SetUserMessage(groupID, groupFlags, message);
     }

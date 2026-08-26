@@ -28,10 +28,10 @@
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
-#include "Helpers/OIVHelper.h"
+#include <OIVAppCore/OIVHelper.h>
 #include "Helpers/ClipboardSetup.h"
-#include "Helpers/MessageHelper.h"
-#include "Helpers/ShellIntegrationHelper.h"
+#include <OIVAppCore/MessageHelper.h>
+#include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
 #include "Win32/UserMessages.h"
@@ -44,7 +44,7 @@
 
 #include "ContextMenu.h"
 #include "Globals.h"
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
 #include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
@@ -88,9 +88,9 @@ namespace OIV
             }
             else
             {
-                LLUtils::native_string_type anchorPath = LLUtils::StringUtility::ToNativeString(
-                                              LLUtils::PlatformUtility::GetExeFolder()) +
-                                          LLUTILS_TEXT("./Resources/Cursors/ArrowC.cur");
+                LLUtils::native_string_type anchorPath  = LLUtils::StringUtility::ToNativeString(
+                                                              LLUtils::PlatformUtility::GetExeFolder()) +
+                                                          LLUTILS_TEXT("./Resources/Cursors/ArrowC.cur");
                 std::unique_ptr<OIVFileImage> fileImage = std::make_unique<OIVFileImage>(anchorPath);
                 if (fileImage->Load(&fImageLoader, IMCodec::PluginTraverseMode::AnyPlugin) == RC_Success)
                 {
@@ -113,10 +113,10 @@ namespace OIV
         }
 
         LWS::LockMouseToWindowMode lockMode = LWS::LockMouseToWindowMode::NoLock;
-        const auto& mouseState = fMouseDevicesState.find(btnEvent.parent->GetID())->second;
-        const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-        const bool IsLeftDown = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        const bool IsRightCatured = fMouseCaptureState.IsCaptured(MouseButtonType::Right);
+        const auto& mouseState              = fMouseDevicesState.find(btnEvent.parent->GetID())->second;
+        const bool IsRightDown              = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
+        const bool IsLeftDown               = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+        const bool IsRightCatured           = fMouseCaptureState.IsCaptured(MouseButtonType::Right);
 
         if (btnEvent.button == MouseButton::Left)
         {
@@ -197,7 +197,7 @@ namespace OIV
         const auto& mouseState = fMouseDevicesState.find(mouseInput.deviceIndex)->second;
 
         // const bool IsLeftDown = mouseState.GetButtonState(MouseState::Button::Left) == MouseState::State::Down;
-        const bool IsLeftDown = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+        const bool IsLeftDown  = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
         const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
 
         const bool IsRightCatured = fMouseCaptureState.IsCaptured(MouseButtonType::Right);
@@ -287,13 +287,15 @@ namespace OIV
                 it = fMouseDevicesState.emplace(evnt.deviceIndex, decltype(fMouseDevicesState)::mapped_type()).first;
                 // Add standard extension
                 auto stdExtension = std::make_shared<ButtonStdExtension<MouseButtonType>>(evnt.deviceIndex, 250, 0);
-                stdExtension->OnButtonEvent.Add(std::bind(&ViewerApplication::OnMouseEvent, this, std::placeholders::_1));
+                stdExtension->OnButtonEvent.Add(
+                    std::bind(&ViewerApplication::OnMouseEvent, this, std::placeholders::_1));
                 it->second.AddExtension(std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(stdExtension));
 
                 // Add multitap extension for click, double click and triple click
                 /*
                 auto multitapextension = std::make_shared<MultitapExtension<MouseButtonType>>(evnt.deviceIndex, 500, 2);
-                multitapextension->OnButtonEvent.Add(std::bind(&ViewerApplication::OnMouseMultiTap, this,std::placeholders::_1));
+                multitapextension->OnButtonEvent.Add(std::bind(&ViewerApplication::OnMouseMultiTap,
+                this,std::placeholders::_1));
                 it->second.AddExtension(std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(multitapextension));
                 */
             }
@@ -304,8 +306,8 @@ namespace OIV
                     static_cast<decltype(fMouseDevicesState)::mapped_type::underlying_button_type>(i),
                     mouseEvent.buttonState[i]);
 
-                const bool mouseUnderWindow =
-                    mouseEvent.buttonState[i] == ButtonState::Down && fWindow.IsUnderMouseCursor();
+                const bool mouseUnderWindow = mouseEvent.buttonState[i] == ButtonState::Down &&
+                                              fWindow.IsUnderMouseCursor();
                 fMouseCaptureState.Update(static_cast<MouseButton>(i), mouseEvent.buttonState[i], mouseUnderWindow);
 
                 fMouseClickEventHandler.SetButtonState(static_cast<MouseButton>(i), mouseEvent.buttonState[i]);
@@ -324,7 +326,7 @@ namespace OIV
         {
             const auto& mouseState = fMouseDevicesState.begin()->second;
             const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-            const bool IsLeftDown = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+            const bool IsLeftDown  = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
 
             if (args.button == MouseButton::Left)
             {
@@ -441,7 +443,8 @@ namespace OIV
             case WM_SHOWWINDOW:
                 if (fIsFirstFrameDisplayed == false && uMsg.wParam == TRUE)
                 {
-                    PostMessage(reinterpret_cast<HWND>(fWindow.GetHandle()), Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
+                    PostMessage(reinterpret_cast<HWND>(fWindow.GetHandle()),
+                                Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
                     fIsFirstFrameDisplayed = true;
                 }
                 break;
@@ -472,8 +475,8 @@ namespace OIV
             case WM_KEYUP:
             {
                 using namespace LInput;
-                KeyCombination keyCombination = KeyCombination::FromVirtualKey(
-                    static_cast<uint32_t>(uMsg.wParam), static_cast<uint32_t>(uMsg.lParam));
+                KeyCombination keyCombination = KeyCombination::FromVirtualKey(static_cast<uint32_t>(uMsg.wParam),
+                                                                               static_cast<uint32_t>(uMsg.lParam));
 
                 bool isAltup = (keyCombination.keydata().keycode == KeyCode::LALT ||
                                 keyCombination.keydata().keycode == KeyCode::RIGHTALT ||

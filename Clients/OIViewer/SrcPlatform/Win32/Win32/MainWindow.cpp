@@ -13,7 +13,6 @@ namespace OIV
             AddEventListener([this](const LWS::AnyEvent& eventData) { return HandleWindwMessage(eventData); });
         }
 
-
         void MainWindow::SetCursorType(CursorType type)
         {
             if (type != fCurrentCursorType && type >= CursorType::SystemDefault)
@@ -22,6 +21,9 @@ namespace OIV
 
                 if (fCursorsInitialized == false)
                 {
+                    // TODO: Restore the OIViewer cursor artwork through a portable LWS custom-cursor descriptor
+                    // containing an RGBA bitmap and hotspot. Load portable assets once, let each backend own its
+                    // native cursor resource, return a Result for failures, and fall back to CursorShape cursors.
                     fCursors[static_cast<size_t>(CursorType::SystemDefault)].setCursorShape(LWS::CursorShape::Arrow);
                     fCursors[static_cast<size_t>(CursorType::East)].setCursorShape(LWS::CursorShape::SizeEW);
                     fCursors[static_cast<size_t>(CursorType::NorthEast)].setCursorShape(LWS::CursorShape::SizeNESW);
@@ -44,69 +46,60 @@ namespace OIV
 
         void MainWindow::OnCreate()
         {
-            //fHandleStatusBar = DoCreateStatusBar(GetHandle(), 12, GetModuleHandle(nullptr), 3);
-            //ResizeStatusBar();
+            // fHandleStatusBar = DoCreateStatusBar(GetHandle(), 12, GetModuleHandle(nullptr), 3);
+            // ResizeStatusBar();
 
             fCanvasWindow.Create();
             fCanvasWindow.SetParent(this);
             fCanvasWindow.SetVisible(true);
             fCanvasWindow.SetTransparent(true);
 
-          
             HICON icon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
             SendMessage(GetNativeHandle(), WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
             SendMessage(GetNativeHandle(), WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
 
-           
-       
-
-            //SetStatusBarText(LLUTILS_TEXT("pixel: "), 0, SBT_NOBORDERS);
-            //SetStatusBarText(LLUTILS_TEXT("File: "), 1, 0);
-
+            // SetStatusBarText(LLUTILS_TEXT("pixel: "), 0, SBT_NOBORDERS);
+            // SetStatusBarText(LLUTILS_TEXT("File: "), 1, 0);
         }
 
-
-
-        HWND MainWindow::DoCreateStatusBar(HWND hwndParent, uint32_t idStatus, HINSTANCE hinst, [[maybe_unused]] uint32_t cParts)
+        HWND MainWindow::DoCreateStatusBar(HWND hwndParent, uint32_t idStatus, HINSTANCE hinst,
+                                           [[maybe_unused]] uint32_t cParts)
         {
             HWND hwndStatus;
 
             // Create the status bar.
             hwndStatus = CreateWindowEx(
-                0, // no extended styles
-                STATUSCLASSNAME, // name of status bar class
-                nullptr, // no text when first created
-                SBARS_SIZEGRIP | // includes a sizing grip
-                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, // creates a visible child window
-                0, 0, 0, 0, // ignores size and position
-                hwndParent, // handle to parent window
-                reinterpret_cast<HMENU>(static_cast<size_t>(idStatus)), // child window identifier
-                hinst, // handle to application instance
-                nullptr); // no window creation data
-
+                0,                                                              // no extended styles
+                STATUSCLASSNAME,                                                // name of status bar class
+                nullptr,                                                        // no text when first created
+                SBARS_SIZEGRIP |                                                // includes a sizing grip
+                    WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,  // creates a visible child window
+                0, 0, 0, 0,                                                     // ignores size and position
+                hwndParent,                                                     // handle to parent window
+                reinterpret_cast<HMENU>(static_cast<size_t>(idStatus)),         // child window identifier
+                hinst,                                                          // handle to application instance
+                nullptr);                                                       // no window creation data
 
             return hwndStatus;
         }
 
-
         void MainWindow::SetStatusBarText(LLUtils::native_string_type message, int part, int type)
         {
             if (fHandleStatusBar != nullptr)
-                ::SendMessage(fHandleStatusBar, SB_SETTEXT, MAKEWORD(part, type), reinterpret_cast<LPARAM>(message.c_str()));
+                ::SendMessage(fHandleStatusBar, SB_SETTEXT, MAKEWORD(part, type),
+                              reinterpret_cast<LPARAM>(message.c_str()));
         }
 
-
-        //void MainWindow::ResizeStatusBar()
+        // void MainWindow::ResizeStatusBar()
         //{
-        //    if (fHandleStatusBar == nullptr)
-        //        return;
-        //    RECT rcClient;
-        //    HLOCAL hloc;
-        //    PINT paParts;
-        //    int i, nWidth;
-        //    if (GetClientRect(GetHandle(), &rcClient) == 0)
-        //        return;
-
+        //     if (fHandleStatusBar == nullptr)
+        //         return;
+        //     RECT rcClient;
+        //     HLOCAL hloc;
+        //     PINT paParts;
+        //     int i, nWidth;
+        //     if (GetClientRect(GetHandle(), &rcClient) == 0)
+        //         return;
 
         //    SetWindowPos(fHandleStatusBar, nullptr, 0, 0, -1, -1, 0);
         //    // Allocate an array for holding the right edge coordinates.
@@ -135,8 +128,6 @@ namespace OIV
         //    LocalFree(hloc);
         //}
 
-
-
         bool MainWindow::GetShowImageControl() const
         {
             return fShowImageControl;
@@ -146,7 +137,9 @@ namespace OIV
         {
             // show status bar if explicity not visible and caption is visible
             return fShowStatusBar == true &&
-                ((GetWindowStyles() & (LWS::WindowStyle::Caption | LWS::WindowStyle::CloseButton | LWS::WindowStyle::MinimizeButton | LWS::WindowStyle::MaximizeButton)) != LWS::WindowStyle::NoStyle);
+                   ((GetWindowStyles() & (LWS::WindowStyle::Caption | LWS::WindowStyle::CloseButton |
+                                          LWS::WindowStyle::MinimizeButton | LWS::WindowStyle::MaximizeButton)) !=
+                    LWS::WindowStyle::NoStyle);
         }
 
         void MainWindow::HandleResize()
@@ -154,11 +147,10 @@ namespace OIV
             RECT rect;
             ::GetClientRect(GetNativeHandle(), &rect);
             SIZE clientSize;
-            const int ImageListWidth = 200;
+            const int ImageListWidth         = 200;
             const bool isImageControlVisible = GetShowImageControl();
-            clientSize.cx = rect.right - rect.left - (isImageControlVisible ?  ImageListWidth : 0 );
-            clientSize.cy = rect.bottom - rect.top;
-
+            clientSize.cx                    = rect.right - rect.left - (isImageControlVisible ? ImageListWidth : 0);
+            clientSize.cy                    = rect.bottom - rect.top;
 
             if (GetShowStatusBar() && GetFullScreenState() == LWS::FullScreenState::Windowed)
             {
@@ -166,21 +158,23 @@ namespace OIV
                 ShowWindow(fHandleStatusBar, SW_SHOW);
                 GetWindowRect(fHandleStatusBar, &statusBarRect);
                 clientSize.cy -= statusBarRect.bottom - statusBarRect.top;
-//                ResizeStatusBar();
+                //                ResizeStatusBar();
             }
             else
             {
                 ShowWindow(fHandleStatusBar, SW_HIDE);
             }
 
-            SetWindowPos(reinterpret_cast<HWND>(fCanvasWindow.GetHandle()), nullptr, 0, 0, clientSize.cx, clientSize.cy, 0);
+            SetWindowPos(reinterpret_cast<HWND>(fCanvasWindow.GetHandle()), nullptr, 0, 0, clientSize.cx, clientSize.cy,
+                         0);
 
             if (fImageControl.GetHandle() != 0)
             {
                 fImageControl.SetVisible(isImageControlVisible);
 
                 if (isImageControlVisible)
-                    SetWindowPos(reinterpret_cast<HWND>(fImageControl.GetHandle()), nullptr, clientSize.cx, 0, ImageListWidth, clientSize.cy, SWP_NOACTIVATE | SWP_NOZORDER);
+                    SetWindowPos(reinterpret_cast<HWND>(fImageControl.GetHandle()), nullptr, clientSize.cx, 0,
+                                 ImageListWidth, clientSize.cy, SWP_NOACTIVATE | SWP_NOZORDER);
             }
 
             ShowWindow(fHandleStatusBar, GetFullScreenState() == LWS::FullScreenState::Windowed ? SW_SHOW : SW_HIDE);
@@ -201,21 +195,18 @@ namespace OIV
             {
                 fShowImageControl = show;
                 if (fImageControl.GetHandle() == 0)
-				{
+                {
                     fImageControl.Create();
-		            fImageControl.SetParent(this);
-				}
+                    fImageControl.SetParent(this);
+                }
                 HandleResize();
             }
         }
-
 
         HWND MainWindow::GetCanvasHandle() const
         {
             return reinterpret_cast<HWND>(fCanvasWindow.GetHandle());
         }
-
-
 
         SIZE MainWindow::GetCanvasSize() const
         {
@@ -223,8 +214,6 @@ namespace OIV
             ::GetClientRect(GetCanvasHandle(), &rect);
             return {rect.right - rect.left, rect.bottom - rect.top};
         }
-
-
 
         bool MainWindow::HandleWindwMessage(const LWS::AnyEvent& eventData)
         {
@@ -237,33 +226,34 @@ namespace OIV
 
             switch (message.message)
             {
-            case WM_CREATE:
-                OnCreate();
-                break;
+                case WM_CREATE:
+                    OnCreate();
+                    break;
 
-            case WM_SIZE:
-                HandleResize();
-                break;
-            case WM_DESTROY:
-                PostQuitMessage(0);
-                break;
-            case WM_ACTIVATE:
-                if (message.wParam != WA_INACTIVE)
-                    SetIsTrayWindow(false);
+                case WM_SIZE:
+                    HandleResize();
+                    break;
+                case WM_DESTROY:
+                    PostQuitMessage(0);
+                    break;
+                case WM_ACTIVATE:
+                    if (message.wParam != WA_INACTIVE)
+                        SetIsTrayWindow(false);
 
-                break;
+                    break;
             }
             return false;
         }
 
         void MainWindow::SetIsTrayWindow(bool isTrayWindow)
         {
-            ::SetProp(GetNativeHandle(), LLUTILS_TEXT("isTrayWindow"), isTrayWindow ?  reinterpret_cast<HANDLE>(1) : nullptr);
+            ::SetProp(GetNativeHandle(), LLUTILS_TEXT("isTrayWindow"),
+                      isTrayWindow ? reinterpret_cast<HANDLE>(1) : nullptr);
         }
-        
+
         bool MainWindow::GetIsTrayWindow(HWND hwnd)
         {
             return ::GetProp(hwnd, LLUTILS_TEXT("isTrayWindow")) != nullptr;
-       }
-    }
-}
+        }
+    }  // namespace Win32
+}  // namespace OIV

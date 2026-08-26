@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ConfigurationLoader.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 
 #include <LInput/Keys/KeyBindings.h>
 #include <LInput/Keys/KeyCombination.h>
@@ -14,11 +14,12 @@ namespace OIV
     class CommandRegistry
     {
       public:
+
         template <typename BindingElement>
         static void AddConfiguredCommandsAndKeyBindings(CommandManager& commandManager,
                                                         LInput::KeyBindings<BindingElement>& keyBindings)
         {
-            auto commandGroups = ConfigurationLoader::LoadCommandGroups();
+            auto commandGroups         = ConfigurationLoader::LoadCommandGroups();
             auto configuredKeyBindings = ConfigurationLoader::LoadKeyBindings();
 
             for (const auto& commandGroup : commandGroups)
