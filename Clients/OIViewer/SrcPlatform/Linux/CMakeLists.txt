@@ -1,5 +1,11 @@
 target_compile_definitions(OIViewer PRIVATE OIVIEWER_PLATFORM_LINUX)
 
+if(NOT TARGET PkgConfig::GTK3)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+endif()
+target_link_libraries(OIViewer PRIVATE PkgConfig::GTK3)
+
 target_sources(OIViewer PRIVATE
     ApplicationLog.cpp
     ClipboardSetup.cpp
