@@ -4,6 +4,7 @@
 #include <LLUtils/Exception.h>
 #include <nlohmann/json.hpp>
 
+#include <filesystem>
 #include <iostream>
 #include <stack>
 
@@ -14,8 +15,9 @@ namespace OIV
         using namespace nlohmann;
         using namespace LLUtils;
 
-        std::string jsonText = File::ReadAllText<std::string>(LLUtils::PlatformUtility::GetExeFolder() +
-                                                              LLUTILS_TEXT("./Resources/Configuration/Commands.json"));
+        const auto path      = std::filesystem::path(LLUtils::PlatformUtility::GetExeFolder()) / "Resources" /
+                               "Configuration" / "Commands.json";
+        std::string jsonText = File::ReadAllText<std::string>(path.native());
         auto jsonObject      = json::parse(jsonText);
         auto commands        = jsonObject["commands"];
 
@@ -35,10 +37,11 @@ namespace OIV
         using namespace nlohmann;
         using namespace LLUtils;
 
-        std::string jsonText = File::ReadAllText<std::string>(
-            LLUtils::PlatformUtility::GetExeFolder() + LLUTILS_TEXT("./Resources/Configuration/KeyBindings.json"));
-        auto jsonObject  = json::parse(jsonText);
-        auto keyBindings = jsonObject["KeyBindings"];
+        const auto path      = std::filesystem::path(LLUtils::PlatformUtility::GetExeFolder()) / "Resources" /
+                               "Configuration" / "KeyBindings.json";
+        std::string jsonText = File::ReadAllText<std::string>(path.native());
+        auto jsonObject      = json::parse(jsonText);
+        auto keyBindings     = jsonObject["KeyBindings"];
 
         if (keyBindings == nullptr || keyBindings.is_array() == false)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::BadParameters, "File contents mismatch");
@@ -62,9 +65,10 @@ namespace OIV
 
         try
         {
-            std::string jsonText = File::ReadAllText<std::string>(
-                LLUtils::PlatformUtility::GetExeFolder() + LLUTILS_TEXT("./Resources/Configuration/Settings.json"));
-            auto jsonObject = json::parse(jsonText);
+            const auto path      = std::filesystem::path(LLUtils::PlatformUtility::GetExeFolder()) / "Resources" /
+                                   "Configuration" / "Settings.json";
+            std::string jsonText = File::ReadAllText<std::string>(path.native());
+            auto jsonObject      = json::parse(jsonText);
 
             SettingEntryForParsing root;
 

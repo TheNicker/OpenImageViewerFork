@@ -1,447 +1,360 @@
-#include <iomanip>
-#include <filesystem>
-#include <thread>
-#include <future>
-#include <cassert>
-
 #include "ViewerApplication.h"
 
-#include <Windows.h>
-#include <Version.h>
-
-#include <Functions.h>
-#include <ApiGlobal.h>
-#include <LWS/Platform.hpp>
+#include "Globals.h"
+#include "UserMessages.h"
+#include "ViewerApplicationPlatformState.h"
 
 #include <LInput/Keys/KeyCombination.h>
-#include <LInput/Keys/KeyBindings.h>
-#include <LInput/Buttons/Extensions/ButtonsStdExtension.h>
-#include <LInput/Mouse/MouseButton.h>
+#include <LWS/Win32/EventWin32.hpp>
 
 #include <LLUtils/Exception.h>
-#include <LLUtils/FileHelper.h>
 #include <LLUtils/PlatformUtility.h>
 #include <LLUtils/StringUtility.h>
-#include <LLUtils/UniqueIDProvider.h>
-#include <LLUtils/Logging/LogPredefined.h>
-#include <LLUtils/Logging/Logger.h>
-#include <LLUtils/FileSystemHelper.h>
-#include <LLUtils/Rect.h>
 
-#include <OIVAppCore/OIVHelper.h>
-#include "Helpers/ClipboardSetup.h"
-#include <OIVAppCore/MessageHelper.h>
-#include <OIVAppCore/ShellIntegrationHelper.h>
-#include "Helpers/ShellCommandHandler.h"
-
-#include "Win32/UserMessages.h"
-#include "OIVCommands.h"
-
-#include "OIVImage/OIVFileImage.h"
-#include "OIVImage/OIVRawImage.h"
-#include "VirtualStatusBar.h"
-#include "MonitorProvider.h"
-
-#include "ContextMenu.h"
-#include "Globals.h"
-#include <OIVAppCore/ConfigurationLoader.h>
-#include "CommandRegistry.h"
-#include "ExceptionHandler.h"
-#include <OIVAppCore/ColorCountPolicy.h>
-#include <OIVAppCore/ColorCorrectionCommandPolicy.h>
-#include <OIVAppCore/FileChangePolicy.h>
-#include <OIVAppCore/FrameLimiterPolicy.h>
-#include <OIVAppCore/ImageEditPolicy.h>
-#include <OIVAppCore/ImageFormatCatalogPolicy.h>
-#include <OIVAppCore/ImageLoadPresentationPolicy.h>
-#include <OIVAppCore/ImageTransformCommandPolicy.h>
-#include <OIVAppCore/InputGesturePolicy.h>
-#include <OIVAppCore/OIVImageHelper.h>
-#include <OIVAppCore/SelectionWorkflowPolicy.h>
-#include <OIVAppCore/SequencerPolicy.h>
-#include <OIVAppCore/SortCommandPolicy.h>
-#include <OIVAppCore/SubImagePolicy.h>
-#include <OIVAppCore/ViewActionController.h>
-#include <OIVAppCore/ViewCommandPolicy.h>
 #include <OIVAppCore/ViewerPresentationPolicy.h>
-#include <OIVShared/PixelHelper.h>
-#include <ImageUtil/ImageUtil.h>
-#include "InterThreadMessages.h"
+#include <OIVAppCore/ConfigurationLoader.h>
 
-#include "Resource.h"
+#include <Windows.h>
 
 namespace OIV
 {
-    void ViewerApplication::OnMouseEvent(const LInput::ButtonStdExtension<MouseButtonType>::ButtonEvent& btnEvent)
+    namespace
+    {
+        const LWS::Win32::WinMessage* GetWinMessage(const LWS::AnyEvent& eventData)
+        {
+            const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
+            if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
+                raw->platformData == nullptr)
+                return nullptr;
+            return reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
+        }
+    }  // namespace
+
+    void ViewerApplication::RawInputState::OnMouseEvent(
+        const LInput::ButtonStdExtension<MouseButtonType>::ButtonEvent& buttonEvent)
     {
         using namespace LInput;
-        bool isMouseCursorOnTopOfWindowAndInsideClientRect = fWindow.IsUnderMouseCursor() &&
-                                                             fWindow.IsMouseCursorInClientRect();
-        if (btnEvent.button == MouseButton::Middle && btnEvent.eventType == EventType::Pressed &&
-            isMouseCursorOnTopOfWindowAndInsideClientRect)
+        const bool mouseInside = owner.fWindow.IsUnderMouseCursor() && owner.fWindow.IsMouseCursorInClientRect();
+        if (buttonEvent.button == MouseButton::Middle && buttonEvent.eventType == EventType::Pressed && mouseInside)
         {
-            fAutoScroll->ToggleAutoScroll();
-            if (fAutoScroll->IsAutoScrolling() == false)
+            owner.fAutoScroll->ToggleAutoScroll();
+            if (!owner.fAutoScroll->IsAutoScrolling())
             {
-                fWindow.SetCursorType(::OIV::Win32::MainWindow::CursorType::SystemDefault);
-                fAutoScrollAnchor.reset();
+                owner.fWindow.SetCursorType(MainWindow::CursorType::SystemDefault);
+                owner.fAutoScrollAnchor.reset();
             }
             else
             {
-                LLUtils::native_string_type anchorPath  = LLUtils::StringUtility::ToNativeString(
-                                                              LLUtils::PlatformUtility::GetExeFolder()) +
-                                                          LLUTILS_TEXT("./Resources/Cursors/ArrowC.cur");
-                std::unique_ptr<OIVFileImage> fileImage = std::make_unique<OIVFileImage>(anchorPath);
-                if (fileImage->Load(&fImageLoader, IMCodec::PluginTraverseMode::AnyPlugin) == RC_Success)
+                const LLUtils::native_string_type anchorPath = LLUtils::StringUtility::ToNativeString(
+                                                                   LLUtils::PlatformUtility::GetExeFolder()) +
+                                                               LLUTILS_TEXT("./Resources/Cursors/ArrowC.cur");
+                auto fileImage                               = std::make_unique<OIVFileImage>(anchorPath);
+                if (fileImage->Load(&owner.fImageLoader, IMCodec::PluginTraverseMode::AnyPlugin) == RC_Success)
                 {
                     fileImage->SetImageRenderMode(OIV_Image_Render_mode::IRM_Overlay);
                     fileImage->SetPosition(static_cast<LLUtils::PointF64>(
-                        static_cast<LLUtils::PointI32>(fWindow.GetMousePosition()) -
+                        static_cast<LLUtils::PointI32>(owner.fWindow.GetMousePosition()) -
                         static_cast<LLUtils::PointI32>(fileImage->GetImage()->GetDimensions()) / 2));
                     fileImage->SetScale({1.0, 1.0});
                     fileImage->SetOpacity(0.5);
                     fileImage->SetVisible(true);
-                    fAutoScrollAnchor = std::move(fileImage);
-                    // TODO: do we need update here when loading the cursor anchor ?
+                    owner.fAutoScrollAnchor = std::move(fileImage);
                 }
             }
         }
 
-        if (btnEvent.button == MouseButton::Left && btnEvent.eventType == EventType::Released)
-        {
-            fWindow.SetLockMouseToWindowMode(LWS::LockMouseToWindowMode::NoLock);
-        }
+        if (buttonEvent.button == MouseButton::Left && buttonEvent.eventType == EventType::Released)
+            owner.fWindow.SetLockMouseToWindowMode(LWS::LockMouseToWindowMode::NoLock);
 
         LWS::LockMouseToWindowMode lockMode = LWS::LockMouseToWindowMode::NoLock;
-        const auto& mouseState              = fMouseDevicesState.find(btnEvent.parent->GetID())->second;
-        const bool IsRightDown              = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-        const bool IsLeftDown               = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        const bool IsRightCatured           = fMouseCaptureState.IsCaptured(MouseButtonType::Right);
+        const auto mouseStateIt             = mouseDevicesState.find(buttonEvent.parent->GetID());
+        if (mouseStateIt == mouseDevicesState.end())
+            return;
 
-        if (btnEvent.button == MouseButton::Left)
+        const auto& mouseState   = mouseStateIt->second;
+        const bool leftDown      = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+        const bool rightDown     = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
+        const bool rightCaptured = mouseCaptureState.IsCaptured(MouseButtonType::Right);
+
+        if (buttonEvent.button == MouseButton::Left)
         {
-            if (btnEvent.eventType == EventType::Pressed && IsRightDown &&
-                isMouseCursorOnTopOfWindowAndInsideClientRect)
+            if (buttonEvent.eventType == EventType::Pressed && rightDown && mouseInside)
             {
-                // Rocker gesture - navigate backward
-                fRockerGestureActivate = true;
-                fContextMenuTimer.SetInterval(0);
-                JumpFiles(-1);
+                owner.fRockerGestureActivate = true;
+                owner.fContextMenuTimer.SetInterval(0);
+                owner.JumpFiles(-1);
             }
-            else if (IsRightDown == false && IsRightCatured == false)
+            else if (!rightDown && !rightCaptured && !LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) &&
+                     !owner.fWindow.IsFullScreen())
             {
-                // Window drag and resize
-                if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) == false && fWindow.IsFullScreen() == false)
-                {
-                    if (LWS::Platform::isKeyPressed(LWS::KeyCode::Control) == true)
-                        lockMode = LWS::LockMouseToWindowMode::LockResize;
-                    else
-                        lockMode = LWS::LockMouseToWindowMode::LockMove;
-                }
-            }
-            if (btnEvent.eventType == EventType::Released)
-            {
-                lockMode = LWS::LockMouseToWindowMode::NoLock;
+                lockMode = LWS::Platform::isKeyPressed(LWS::KeyCode::Control) ? LWS::LockMouseToWindowMode::LockResize
+                                                                              : LWS::LockMouseToWindowMode::LockMove;
             }
 
-            fWindow.SetLockMouseToWindowMode(lockMode);
+            if (buttonEvent.eventType == EventType::Released)
+                lockMode = LWS::LockMouseToWindowMode::NoLock;
+            owner.fWindow.SetLockMouseToWindowMode(lockMode);
 
             if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
             {
-                SelectionRect::Operation op = SelectionRect::Operation::NoOp;
-                if (btnEvent.eventType == EventType::Pressed && fWindow.IsUnderMouseCursor())
-                    op = SelectionRect::Operation::BeginDrag;
-                else if (btnEvent.eventType == EventType::Released && fWindow.IsUnderMouseCursor())
-                    op = SelectionRect::Operation::EndDrag;
-
-                fSelectionRect.SetSelection(op, SnapToScreenSpaceImagePixels(fWindow.GetMousePosition()));
-                SaveImageSpaceSelection();
-            }
-        }
-        if (btnEvent.button == MouseButton::Back || btnEvent.button == MouseButton::Forward)
-        {
-            if (btnEvent.eventType == EventType::Pressed && fWindow.IsUnderMouseCursor())
-            {
-                fTimerNavigation.SetInterval(fQuickBrowseDelay);
-            }
-            else
-            {
-                if (fMouseCaptureState.IsCaptured(MouseButton::Back) == false &&
-                    fMouseCaptureState.IsCaptured(MouseButton::Forward) == false)
-                    fTimerNavigation.SetInterval(0);
+                SelectionRect::Operation operation = SelectionRect::Operation::NoOp;
+                if (buttonEvent.eventType == EventType::Pressed && owner.fWindow.IsUnderMouseCursor())
+                    operation = SelectionRect::Operation::BeginDrag;
+                else if (buttonEvent.eventType == EventType::Released && owner.fWindow.IsUnderMouseCursor())
+                    operation = SelectionRect::Operation::EndDrag;
+                owner.fSelectionRect.SetSelection(operation,
+                                                  owner.SnapToScreenSpaceImagePixels(owner.fWindow.GetMousePosition()));
+                owner.SaveImageSpaceSelection();
             }
         }
 
-        if (btnEvent.button == MouseButton::Right && btnEvent.eventType == EventType::Pressed &&
-            isMouseCursorOnTopOfWindowAndInsideClientRect)
+        if (buttonEvent.button == MouseButton::Back || buttonEvent.button == MouseButton::Forward)
         {
-            // Rocker gesture - navigate forward
-            if (IsLeftDown)
+            if (buttonEvent.eventType == EventType::Pressed && owner.fWindow.IsUnderMouseCursor())
             {
-                fRockerGestureActivate = true;
-                fContextMenuTimer.SetInterval(0);
-                JumpFiles(1);
+                owner.fTimerNavigation.SetInterval(owner.fQuickBrowseDelay);
+            }
+            else if (!mouseCaptureState.IsCaptured(MouseButton::Back) &&
+                     !mouseCaptureState.IsCaptured(MouseButton::Forward))
+            {
+                owner.fTimerNavigation.SetInterval(0);
+            }
+        }
+
+        if (buttonEvent.button == MouseButton::Right && buttonEvent.eventType == EventType::Pressed && mouseInside)
+        {
+            if (leftDown)
+            {
+                owner.fRockerGestureActivate = true;
+                owner.fContextMenuTimer.SetInterval(0);
+                owner.JumpFiles(1);
             }
 
-            if (fContextMenuTimer.GetInterval() == 0 && fRockerGestureActivate == false)
+            if (owner.fContextMenuTimer.GetInterval() == 0 && !owner.fRockerGestureActivate)
             {
-                fContextMenuTimer.SetInterval(500);
-                fDownPosition = LWS::Platform::getMousePosition();
+                owner.fContextMenuTimer.SetInterval(500);
+                owner.fDownPosition = LWS::Platform::getMousePosition();
             }
         }
     }
 
-    void ViewerApplication::OnMouseInput(const LInput::RawInput::RawInputEventMouse& mouseInput)
+    void ViewerApplication::RawInputState::OnMouseInput(const LInput::RawInput::RawInputEventMouse& mouseInput)
     {
         using namespace LInput;
-        const auto& mouseState = fMouseDevicesState.find(mouseInput.deviceIndex)->second;
+        const auto mouseStateIt = mouseDevicesState.find(mouseInput.deviceIndex);
+        if (mouseStateIt == mouseDevicesState.end())
+            return;
 
-        // const bool IsLeftDown = mouseState.GetButtonState(MouseState::Button::Left) == MouseState::State::Down;
-        const bool IsLeftDown  = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
+        const auto& mouseState      = mouseStateIt->second;
+        const bool leftDown         = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+        const bool rightDown        = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
+        const bool rightCaptured    = mouseCaptureState.IsCaptured(MouseButtonType::Right);
+        const bool leftCaptured     = mouseCaptureState.IsCaptured(MouseButtonType::Left);
+        const bool mouseUnderWindow = owner.fWindow.IsUnderMouseCursor();
 
-        const bool IsRightCatured = fMouseCaptureState.IsCaptured(MouseButtonType::Right);
-        const bool IsLeftCaptured = fMouseCaptureState.IsCaptured(MouseButtonType::Left);
-        // const bool IsRightDown = mouseState.GetButtonState(MouseState::Button::Right) == MouseState::State::Down;
-        // const bool IsLeftReleased = evnt->GetButtonEvent(MouseState::Button::Left) == MouseState::EventType::Released;
-
-        const bool isMouseUnderCursor = fWindow.IsUnderMouseCursor();
-
-        // Quick browse feature
-        // const bool isNavigationBackwardDown = (mouseState.GetButtonState(MouseButtonType::Back) ==
-        // ButtonState::Down); const bool isNavigationBackwardUp = (mouseState.GetButtonState(MouseButtonType::Back) ==
-        // ButtonState::Up); const bool isNavigationBackwardUp = (mouseState.GetButtonState(MouseState::Button::Third)
-        // == MouseState::State::Up); const bool isNavigationForwardDown =
-        // mouseState.GetButtonState(MouseButtonType::Forward) == ButtonState::Down; const bool isNavigationForwardUp =
-        // mouseState.GetButtonState(MouseButtonType::Forward) == ButtonState::Up;
-
-        // Selection rect
-        if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
+        if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) && leftCaptured)
         {
-            if (IsLeftCaptured)
-            {
-                auto snappedPOsition = SnapToScreenSpaceImagePixels(fWindow.GetMousePosition());
-                fSelectionRect.SetSelection(SelectionRect::Operation::Drag, snappedPOsition);
-                SaveImageSpaceSelection();
-            }
+            owner.fSelectionRect.SetSelection(SelectionRect::Operation::Drag,
+                                              owner.SnapToScreenSpaceImagePixels(owner.fWindow.GetMousePosition()));
+            owner.SaveImageSpaceSelection();
         }
 
-        if (IsRightCatured == true && fContextMenu->IsVisible() == false)
-        {
-            if (mouseInput.deltaX != 0 || mouseInput.deltaY != 0)
-                Pan(LLUtils::PointF64(mouseInput.deltaX, mouseInput.deltaY));
-        }
+        if (rightCaptured && !owner.fContextMenu->IsVisible() && (mouseInput.deltaX != 0 || mouseInput.deltaY != 0))
+            owner.Pan(LLUtils::PointF64(mouseInput.deltaX, mouseInput.deltaY));
 
-        LONG wheelDelta = mouseInput.wheelDelta;
-
+        const int32_t wheelDelta = mouseInput.wheelDelta;
         if (wheelDelta != 0)
         {
-            // Browse files
-            if (isMouseUnderCursor && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
+            if (mouseUnderWindow && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
+                owner.ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousSubImage" : "NextSubImage");
+            else if (mouseUnderWindow && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
+                owner.ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousImageInFolder" : "NextImageInFolder");
+            else if (rightCaptured || mouseUnderWindow)
             {
-                ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousSubImage" : "NextSubImage");
-            }
-            else if (isMouseUnderCursor && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
-            {
-                ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousImageInFolder" : "NextImageInFolder");
-            }
-            else if (IsRightCatured || isMouseUnderCursor)
-            {
-                auto mousePos = fWindow.GetMousePosition();
-                // 20% percent zoom in each wheel step
-                if (IsRightCatured)
-                    //  Zoom to center of the client area if currently panning.
-                    Zoom(wheelDelta * 0.2);
+                const auto mousePosition = owner.fWindow.GetMousePosition();
+                if (rightCaptured)
+                    owner.Zoom(wheelDelta * 0.2);
                 else
-                    Zoom(wheelDelta * 0.2, mousePos.x, mousePos.y);
+                    owner.Zoom(wheelDelta * 0.2, mousePosition.x, mousePosition.y);
             }
         }
 
-        if (IsRightDown)
+        if (rightDown)
         {
-            LLUtils::PointI32 currentPosition = LWS::Platform::getMousePosition();
-            if (currentPosition.DistanceSquared(fDownPosition) > 25)
-                fContextMenuTimer.SetInterval(0);
+            const LLUtils::PointI32 currentPosition = LWS::Platform::getMousePosition();
+            if (currentPosition.DistanceSquared(owner.fDownPosition) > 25)
+                owner.fContextMenuTimer.SetInterval(0);
         }
         else
         {
-            fContextMenuTimer.SetInterval(0);
+            owner.fContextMenuTimer.SetInterval(0);
         }
 
-        if (IsLeftDown == false && IsRightDown == false)
-            fRockerGestureActivate = false;
+        if (!leftDown && !rightDown)
+            owner.fRockerGestureActivate = false;
     }
 
-    void ViewerApplication::OnRawInput(const LInput::RawInput::RawInputEvent& evnt)
+    void ViewerApplication::RawInputState::OnRawInput(const LInput::RawInput::RawInputEvent& event)
     {
         using namespace LInput;
-        if (evnt.deviceType == RawInput::RawInputDeviceType::Mouse)
+        if (event.deviceType != RawInput::RawInputDeviceType::Mouse)
+            return;
+
+        const auto& mouseEvent = static_cast<const RawInput::RawInputEventMouse&>(event);
+        auto mouseStateIt      = mouseDevicesState.find(event.deviceIndex);
+        if (mouseStateIt == mouseDevicesState.end())
         {
-            const auto& mouseEvent = static_cast<const RawInput::RawInputEventMouse&>(evnt);
-
-            // Add button states for multiple mouses.
-            auto it = fMouseDevicesState.find(evnt.deviceIndex);
-            // if mouse ID not found add new buttonstates entry.
-            if (it == std::end(fMouseDevicesState))
-            {
-                it = fMouseDevicesState.emplace(evnt.deviceIndex, decltype(fMouseDevicesState)::mapped_type()).first;
-                // Add standard extension
-                auto stdExtension = std::make_shared<ButtonStdExtension<MouseButtonType>>(evnt.deviceIndex, 250, 0);
-                stdExtension->OnButtonEvent.Add(
-                    std::bind(&ViewerApplication::OnMouseEvent, this, std::placeholders::_1));
-                it->second.AddExtension(std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(stdExtension));
-
-                // Add multitap extension for click, double click and triple click
-                /*
-                auto multitapextension = std::make_shared<MultitapExtension<MouseButtonType>>(evnt.deviceIndex, 500, 2);
-                multitapextension->OnButtonEvent.Add(std::bind(&ViewerApplication::OnMouseMultiTap,
-                this,std::placeholders::_1));
-                it->second.AddExtension(std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(multitapextension));
-                */
-            }
-
-            for (size_t i = 0; i < RawInput::MaxMouseButtons; i++)
-            {
-                it->second.SetButtonState(
-                    static_cast<decltype(fMouseDevicesState)::mapped_type::underlying_button_type>(i),
-                    mouseEvent.buttonState[i]);
-
-                const bool mouseUnderWindow = mouseEvent.buttonState[i] == ButtonState::Down &&
-                                              fWindow.IsUnderMouseCursor();
-                fMouseCaptureState.Update(static_cast<MouseButton>(i), mouseEvent.buttonState[i], mouseUnderWindow);
-
-                fMouseClickEventHandler.SetButtonState(static_cast<MouseButton>(i), mouseEvent.buttonState[i]);
-            }
-
-            fMouseClickEventHandler.SetMouseDelta(mouseEvent.deltaX, mouseEvent.deltaY);
-
-            OnMouseInput(mouseEvent);
+            mouseStateIt   = mouseDevicesState.emplace(event.deviceIndex, MouseButtonState{}).first;
+            auto extension = std::make_shared<ButtonStdExtension<MouseButtonType>>(event.deviceIndex, 250, 0);
+            extension->OnButtonEvent.Add(
+                [this](const auto& buttonEvent)
+                {
+                    owner.HandleEventCallback(
+                        [&]()
+                        {
+                            OnMouseEvent(buttonEvent);
+                            return true;
+                        });
+                });
+            mouseStateIt->second.AddExtension(
+                std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(extension));
         }
+
+        for (size_t index = 0; index < RawInput::MaxMouseButtons; ++index)
+        {
+            const auto button = static_cast<MouseButton>(index);
+            mouseStateIt->second.SetButtonState(button, mouseEvent.buttonState[index]);
+            const bool mouseUnderWindow = mouseEvent.buttonState[index] == ButtonState::Down &&
+                                          owner.fWindow.IsUnderMouseCursor();
+            mouseCaptureState.Update(button, mouseEvent.buttonState[index], mouseUnderWindow);
+            mouseClickEventHandler.SetButtonState(button, mouseEvent.buttonState[index]);
+        }
+
+        mouseClickEventHandler.SetMouseDelta(mouseEvent.deltaX, mouseEvent.deltaY);
+        OnMouseInput(mouseEvent);
     }
 
-    void ViewerApplication::OnMouseMultiClick(const MouseMultiClickHandler::EventArgs& args)
+    void ViewerApplication::RawInputState::OnMouseMultiClick(const MouseMultiClickHandler::EventArgs& event)
     {
         using namespace LInput;
-        if (args.clickCount == 2 && fWindow.IsMouseCursorInClientRect() && fWindow.IsUnderMouseCursor())
+        if (event.clickCount != 2 || !owner.fWindow.IsMouseCursorInClientRect() ||
+            !owner.fWindow.IsUnderMouseCursor() || mouseDevicesState.empty())
+            return;
+
+        const auto& mouseState = mouseDevicesState.begin()->second;
+        const bool rightDown   = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
+        const bool leftDown    = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
+        if (event.button == MouseButton::Left && !rightDown)
         {
-            const auto& mouseState = fMouseDevicesState.begin()->second;
-            const bool IsRightDown = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-            const bool IsLeftDown  = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-
-            if (args.button == MouseButton::Left)
-            {
-                if (IsRightDown == false)
-                {
-                    if (fSelectionRect.GetOperation() != SelectionRect::Operation::NoOp)
-                    {
-                        CancelSelection();
-                    }
-                    else
-                    {
-                        ToggleFullScreen(LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) ? true : false);
-                    }
-                }
-            }
-
-            if (args.button == MouseButton::Right)
-            {
-                if (IsLeftDown == false)
-                {
-                    ExecutePredefinedCommand("PasteImageFromClipboard");
-                }
-            }
+            if (owner.fSelectionRect.GetOperation() != SelectionRect::Operation::NoOp)
+                owner.CancelSelection();
+            else
+                owner.ToggleFullScreen(LWS::Platform::isKeyPressed(LWS::KeyCode::Alt));
+        }
+        else if (event.button == MouseButton::Right && !leftDown)
+        {
+            owner.ExecutePredefinedCommand("PasteImageFromClipboard");
         }
     }
 
-    bool ViewerApplication::handleKeyInput(const LWS::Win32::WinMessage& message)
+    int ViewerApplication::RawInputState::GetNavigationDirection() const
     {
-        LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
-            static_cast<uint32_t>(message.wParam), static_cast<uint32_t>(message.lParam));
-        LInput::KeyBindings<BindingElement>::ConcreteBindingType bindings;
+        using namespace LInput;
+        if (mouseDevicesState.empty())
+            return 0;
+
+        const auto& state = mouseDevicesState.begin()->second;
+        if (state.GetButtonState(MouseButton::Forward) == ButtonState::Down)
+            return 1;
+        if (state.GetButtonState(MouseButton::Back) == ButtonState::Down)
+            return -1;
+        return 0;
+    }
+
+    void ViewerApplication::InitializeRawInput()
+    {
+        using namespace LInput;
+        fRawInputState->rawInput.AddDevice(RawInput::UsagePage::GenericDesktopControls,
+                                           RawInput::GenericDesktopControlsUsagePage::Mouse,
+                                           RawInput::Flags::EnableBackground);
+        fRawInputState->rawInput.OnInput.Add(
+            [this](const RawInput::RawInputEvent& event)
+            {
+                HandleEventCallback(
+                    [&]()
+                    {
+                        fRawInputState->OnRawInput(event);
+                        return true;
+                    });
+            });
+        fRawInputState->rawInput.Enable(true);
+        fRawInputState->mouseClickEventHandler.OnMouseClickEvent.Add(
+            [this](const MouseMultiClickHandler::EventArgs& event)
+            {
+                HandleEventCallback(
+                    [&]()
+                    {
+                        fRawInputState->OnMouseMultiClick(event);
+                        return true;
+                    });
+            });
+    }
+
+    int ViewerApplication::GetRawNavigationDirection() const
+    {
+        return fRawInputState->GetNavigationDirection();
+    }
+
+    void ViewerApplication::AddPlatformKeyBindings()
+    {
+        for (const auto& keyBinding : ConfigurationLoader::LoadKeyBindings())
+        {
+            fRawInputState->keyBindings.AddBinding(LInput::KeyCombination::FromString(keyBinding.KeyCombinationName),
+                                                   {keyBinding.GroupID, std::string(), std::string()});
+        }
+    }
+
+    bool ViewerApplication::handleKeyInput(const LWS::AnyEvent& eventData)
+    {
+        const auto* message = GetWinMessage(eventData);
+        if (message == nullptr)
+            return false;
+
+        const LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
+            static_cast<uint32_t>(message->wParam), static_cast<uint32_t>(message->lParam));
+        LInput::KeyBindings<RawInputState::BindingElement>::ConcreteBindingType bindings;
         bool result = true;
-        if (result == fKeyBindings.GetBinding(keyCombination, bindings))
+        if (fRawInputState->keyBindings.GetBinding(keyCombination, bindings))
         {
             for (const auto& binding : bindings)
                 result |= ExecutePredefinedCommand(binding.commandDescription);
         }
-
         return result;
     }
 
-    LRESULT ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
+    std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
-        const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
-        if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
-            raw->platformData == nullptr)
-            return 0;
-
-        const LWS::Win32::WinMessage& message = *reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
-
-        LRESULT retValue = 0;
-        switch (message.message)
+        const auto* message = GetWinMessage(eventData);
+        if (message != nullptr && message->message == WM_SIZE)
         {
-            case WM_SIZE:
-                fRefreshOperation.Begin();
-                UpdateWindowSize();
-                fRefreshOperation.End();
-                break;
+            fRefreshOperation.Begin();
+            UpdateWindowSize();
+            fRefreshOperation.End();
         }
-        return retValue;
+        return 0;
     }
 
-    void ViewerApplication::SetTopMostUserMesage()
+    bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
     {
-        SetUserMessage(ViewerPresentationPolicy::FormatTopMostMessage(fTopMostCounter),
-                       static_cast<GroupID>(UserMessageGroups::WindowOnTop),
-                       MessageFlags::Interchangeable | MessageFlags::ManualRemove);
-    }
+        const auto* message = GetWinMessage(eventData);
+        if (message == nullptr)
+            return false;
 
-    bool ViewerApplication::GetAppActive() const
-    {
-        return fIsActive;
-    }
-
-    void ViewerApplication::SetAppActive(bool active)
-    {
-        if (active != fIsActive)
-        {
-            fIsActive = active;
-            if (fIsActive == true && fFileReloadPolicy.HasPendingReloadFor(GetOpenedFileName()))
-            {
-                PerformReloadFile(GetOpenedFileName());
-            }
-            else
-            {
-                UpdateTitle();
-            }
-        }
-    }
-
-    void ViewerApplication::ProcessTopMost()
-    {
-        if (fTopMostCounter > 0)
-        {
-            fTopMostCounter--;
-
-            if (fTopMostCounter == 0)
-            {
-                fTimerTopMostRetention.SetInterval(0);
-                fWindow.SetAlwaysOnTop(false);
-                fMessageManager->RemoveGroup(static_cast<GroupID>(UserMessageGroups::WindowOnTop));
-            }
-            else
-                SetTopMostUserMesage();
-        }
-    }
-
-    bool ViewerApplication::HandleWinMessageEvent(const LWS::Win32::WinMessage& uMsg)
-    {
         bool handled = false;
-
-        switch (uMsg.message)
+        switch (message->message)
         {
             case WM_SHOWWINDOW:
-                if (fIsFirstFrameDisplayed == false && uMsg.wParam == TRUE)
+                if (!fIsFirstFrameDisplayed && message->wParam == TRUE)
                 {
                     PostMessage(reinterpret_cast<HWND>(fWindow.GetHandle()),
                                 Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
@@ -451,46 +364,38 @@ namespace OIV
             case Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED:
                 AfterFirstFrameDisplayed();
                 break;
-
             case Win32::UserMessage::PRIVATE_WN_AUTO_SCROLL:
                 fAutoScroll->PerformAutoScroll();
                 break;
             case Win32::UserMessage::PRIVATE_WM_NOTIFY_FILE_CHANGED:
-                OnFileChangedImpl(reinterpret_cast<IFileWatcher::FileChangedEventArgs*>(uMsg.wParam));
+                OnFileChangedImpl(reinterpret_cast<IFileWatcher::FileChangedEventArgs*>(message->wParam));
                 break;
-
             case WM_COPYDATA:
             {
-                COPYDATASTRUCT* cds = (COPYDATASTRUCT*) uMsg.lParam;
-                if (uMsg.wParam == ::OIV::Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY)
+                const auto* copyData = reinterpret_cast<const COPYDATASTRUCT*>(message->lParam);
+                if (message->wParam == Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY && copyData != nullptr)
                 {
-                    wchar_t* fileToLoad = reinterpret_cast<wchar_t*>(cds->lpData);
+                    const auto* fileToLoad = reinterpret_cast<const wchar_t*>(copyData->lpData);
                     LoadFile(fileToLoad, IMCodec::PluginTraverseMode::NoTraverse);
                     fWindow.SetVisible(true);
                 }
+                break;
             }
-            break;
-
             case WM_SYSKEYUP:
             case WM_KEYUP:
             {
-                using namespace LInput;
-                KeyCombination keyCombination = KeyCombination::FromVirtualKey(static_cast<uint32_t>(uMsg.wParam),
-                                                                               static_cast<uint32_t>(uMsg.lParam));
-
-                bool isAltup = (keyCombination.keydata().keycode == KeyCode::LALT ||
-                                keyCombination.keydata().keycode == KeyCode::RIGHTALT ||
-                                keyCombination.keydata().keycode == KeyCode::RALT);
-
-                if (isAltup)
+                LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
+                    static_cast<uint32_t>(message->wParam), static_cast<uint32_t>(message->lParam));
+                const auto keyCode = keyCombination.keydata().keycode;
+                if (keyCode == LInput::KeyCode::LALT || keyCode == LInput::KeyCode::RIGHTALT ||
+                    keyCode == LInput::KeyCode::RALT)
                     fDoubleTap.SetState(false);
+                break;
             }
-            break;
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
-                handled = handleKeyInput(uMsg);
+                handled = handleKeyInput(eventData);
                 break;
-
             case WM_MOUSEMOVE:
                 UpdateTexelPos();
                 break;
@@ -498,83 +403,43 @@ namespace OIV
                 CloseApplication(false);
                 break;
             case WM_ACTIVATE:
-                SetAppActive(uMsg.wParam != WA_INACTIVE);
+                SetAppActive(message->wParam != WA_INACTIVE);
+                break;
+            default:
                 break;
         }
-
         return handled;
     }
 
     void ViewerApplication::CloseApplication(bool closeToTray)
     {
-        HANDLE mutex = CreateMutex(
-            NULL, FALSE, (LLUtils::native_string_type(Globals::ProgramGuid) + LLUTILS_TEXT("_CLOSEAPP")).c_str());
+        const HANDLE mutex = CreateMutex(
+            nullptr, FALSE, (LLUtils::native_string_type(Globals::ProgramGuid) + LLUTILS_TEXT("_CLOSEAPP")).c_str());
         if (mutex == nullptr)
-        {
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex cannot be created.");
-        }
 
-        const DWORD result = WaitForSingleObject(mutex,      // handle to mutex
-                                                 INFINITE);  // no time-out interval
+        const DWORD result = WaitForSingleObject(mutex, INFINITE);
+        if (result != WAIT_OBJECT_0)
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex ownership cannot be acquired.");
 
-        switch (result)
-        {
-            case WAIT_OBJECT_0:
-
-                fWindow.SetVisible(false);
-
-                if (closeToTray == false || FindTrayBarWindow() != nullptr)
-                {
-                    fWindow.Destroy();
-                }
-                else
-                {
-                    fWindow.SetIsTrayWindow(true);
-                }
-
-                break;
-            default:
-                LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex ownership cannot be acquired.");
-        }
+        fWindow.SetVisible(false);
+        if (!closeToTray || FindTrayBarWindow() != 0)
+            fWindow.Destroy();
+        else
+            fWindow.SetIsTrayWindow(true);
 
         if (!ReleaseMutex(mutex))
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex cannot be released.");
-
-        if (CloseHandle(mutex) == FALSE)
+        if (!CloseHandle(mutex))
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex cannot be closed.");
-    }
-
-    bool ViewerApplication::HandleFileDragDropEvent(const LWS::EventDragDropFile& eventDragDropFile)
-    {
-        LLUtils::native_string_type normalizedPath =
-            std::filesystem::path(eventDragDropFile.fileName).lexically_normal().wstring();
-        if (LoadFileOrFolder(normalizedPath,
-                             IMCodec::PluginTraverseMode::AnyPlugin | IMCodec::PluginTraverseMode::AnyFileType))
-        {
-            fWindow.SetForground();
-            return true;
-        }
-
-        return false;
-    }
-
-    bool ViewerApplication::HandleClientWindowMessages(const LWS::AnyEvent& eventData)
-    {
-        return ClientWindwMessage(eventData) != 0;
     }
 
     bool ViewerApplication::HandleMessages(const LWS::AnyEvent& eventData)
     {
-        if (const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
-            raw != nullptr && raw->platformType == std::to_underlying(LWS::BackendId::Win32) &&
-            raw->platformData != nullptr)
-        {
-            return HandleWinMessageEvent(*reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData));
-        }
-
+        if (GetWinMessage(eventData) != nullptr)
+            return HandleWinMessageEvent(eventData);
         if (const auto* dragDropEvent = std::get_if<LWS::EventDragDropFile>(&eventData))
             return HandleFileDragDropEvent(*dragDropEvent);
-
         return false;
     }
 }  // namespace OIV

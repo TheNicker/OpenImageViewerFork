@@ -2,7 +2,6 @@
 
 #include <Defs.h>
 #include <LLUtils/Utility.h>
-#include <LLUtils/Logging/LogPredefined.h>
 #include <LLUtils/Rect.h>
 #include <LLUtils/EnumClassBitwise.h>
 
@@ -11,9 +10,8 @@
 #include <LWS/NotificationIconGroup.hpp>
 #include <LWS/Platform.hpp>
 #include <LWS/Timer.hpp>
-#include <LWS/Win32/EventWin32.hpp>
 
-#include "Win32/MainWindow.h"
+#include "MainWindow.h"
 #include "AutoScroll.h"
 #include "ImageDescriptor.h"
 #include <OIVAppCore/CommandController.h>
@@ -21,19 +19,12 @@
 #include <OIVShared/FileSorter.h>
 #include <OIVShared/RecursiveDelayOp.h>
 
-#include <LInput/Keys/KeyBindings.h>
-#include <LInput/Buttons/ButtonStates.h>
-#include <LInput/Mouse/MouseButton.h>
-#include <LInput/Win32/RawInput/RawInput.h>
-#include <LInput/Buttons/Extensions/ButtonsStdExtension.h>
-
+#include "ApplicationLog.h"
 #include "OIVImage/OIVBaseImage.h"
 #include "LabelManager.h"
 #include "VirtualStatusBar.h"
 #include "MonitorProvider.h"
-#include "MouseCaptureState.h"
 #include "ContextMenu.h"
-#include "Win32/FileWatcherWin32.h"
 #include "ViewerRenderPort.h"
 #include <OIVAppCore/AppSettingsPolicy.h>
 #include <OIVAppCore/FolderFileList.h>
@@ -48,16 +39,26 @@
 #include <OIVAppCore/ViewerPresentationPolicy.h>
 #include <OIVShared/ViewTransformController.h>
 
-#include "MouseMultiClickHandler.h"
 #include "UI/MessageManager.h"
 
 #include <NetSettings/GuiProvider.h>
 #include <ImageLoader.h>
 #include <ImageCodec.h>
-#include <vector>
-#include "Win32/EventSync.h"
+#include "EventSync.h"
 #include "InterThreadMessages.h"
 #include <OIVShared/ImageResidencyCache.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <set>
+#include <string>
+#include <thread>
+#include <type_traits>
+#include <vector>
 namespace OIV
 {
     enum class ImageSizeType
@@ -127,7 +128,6 @@ namespace OIV
                 {
                     // trigger double tap.
                     callback();
-                    // MessageBox(nullptr, LLUTILS_TEXT("12"), LLUTILS_TEXT("12"), MB_OK);
                     fLastTap = high_resolution_clock::time_point::min();
                 }
                 fLastTap = high_resolution_clock::now();
@@ -145,7 +145,7 @@ namespace OIV
         void Init(LLUtils::native_string_type filePath);
         void Run();
         static LLUtils::native_string_type GetAppDataFolder();
-        static HWND FindTrayBarWindow();
+        static LWS::Handle FindTrayBarWindow();
 
       private:  // types
 
@@ -158,24 +158,26 @@ namespace OIV
       private:  // methods
 
         LLUtils::native_string_type GetLogFilePath();
-        void HandleException(bool isFromLibrary, LLUtils::Exception::EventArgs args, LLUtils::native_string_type seperatedCallStack);
-#pragma region Win32 event handling
-        bool handleKeyInput(const LWS::Win32::WinMessage& message);
-        LRESULT ClientWindwMessage(const LWS::AnyEvent& eventData);
+        void HandleException(bool isFromLibrary, LLUtils::Exception::EventArgs args,
+                             LLUtils::native_string_type seperatedCallStack);
+#pragma region platform event handling
+        bool handleKeyInput(const LWS::AnyEvent& eventData);
+        std::intptr_t ClientWindwMessage(const LWS::AnyEvent& eventData);
         void SetTopMostUserMesage();
         void ProcessTopMost();
         void SetAppActive(bool active);
         bool GetAppActive() const;
 
-        bool HandleWinMessageEvent(const LWS::Win32::WinMessage& message);
+        bool HandleWinMessageEvent(const LWS::AnyEvent& eventData);
         void CloseApplication(bool closeToTray);
         bool HandleFileDragDropEvent(const LWS::EventDragDropFile& eventDragDropFile);
         bool HandleMessages(const LWS::AnyEvent& eventData);
         bool HandleClientWindowMessages(const LWS::AnyEvent& eventData);
         double GetMinimumPixelSize();
 
-#pragma endregion Win32 event handling
+#pragma endregion platform event handling
         void AddCommandsAndKeyBindings();
+        void AddPlatformKeyBindings();
         void OnMonitorChanged(const EventManager::MonitorChangeEventParams& params);
         void ProbeForMonitorChange();
         void PerformRefresh();
@@ -212,7 +214,7 @@ namespace OIV
         void OnRefresh();
         void OnRefreshTimer();
         void OnPreserveSelectionRect();
-        HWND GetWindowHandle() const;
+        LWS::Handle GetWindowHandle() const;
         void UpdateTitle();
         // bool JumpTo(FileIndexType fileIndex);
         bool JumpFiles(FolderFileList::index_type step);
@@ -280,7 +282,7 @@ namespace OIV
         void AddImageToControl(IMCodec::ImageSharedPtr image, uint16_t imageSlot, uint16_t totalImages);
         void OnContextMenuTimer();
         void SetDownScalingTechnique(DownscalingTechnique technique);
-        bool IsMainThread() const { return fMainThreadID == GetCurrentThreadId(); }
+        bool IsMainThread() const { return fMainThreadID == std::this_thread::get_id(); }
         void OnFileChangedImpl(const IFileWatcher::FileChangedEventArgs*
                                    fileChangedEventArgs);  // file change handler, runs in the main thread.
         void OnFileChanged(IFileWatcher::FileChangedEventArgs fileChangedEventArgs);  // callback from file watcher
@@ -307,6 +309,15 @@ namespace OIV
         LLUtils::PointI32 SnapToScreenSpaceImagePixels(LLUtils::PointI32 pointOnScreen);
         void OnMessageFromBackgroundThread(const EventData& sharedData);
         void OnCountingColorsCompleted(const CountColorsData& countColorsData);
+        bool HandleEventCallback(const std::function<bool()>& callback) noexcept;
+        std::function<void()> MakeSafeCallback(std::function<void()> callback);
+        void InitializePlatformState();
+        void InitializeRawInput();
+        [[nodiscard]] int GetRawNavigationDirection() const;
+        void InitializeNotificationIcons();
+        void InitializeRenderer();
+        [[nodiscard]] LWS::Rect GetNotificationIconRect(LWS::NotificationIconGroup::IconID iconId) const;
+        [[nodiscard]] static LLUtils::native_string_type GetApplicationModulePath();
 
         using netsettings_Create_func       = void (*)(GuiCreateParams*);
         using netsettings_SetVisible_func   = void (*)(bool);
@@ -330,7 +341,7 @@ namespace OIV
         LWS::Platform::MonitorDesc fCurrentMonitorProperties{};
         MonitorProvider fMonitorProvider;
 #pragma endregion FrameLimiter
-        Win32::MainWindow fWindow;
+        MainWindow fWindow;
         AutoScrollUniquePtr fAutoScroll;
         RecursiveDelayedOp fRefreshOperation;
         RecursiveDelayedOp fPreserveImageSpaceSelection;
@@ -346,25 +357,23 @@ namespace OIV
         std::thread fCountingColorsThread;
         // FileCache fFileCache;
 
-        using MouseButtonType = LInput::MouseButton;
-        template <typename T>
-        using DeviceGroup = std::map<uint8_t, T>;
-
-        using MouseButtonstate = LInput::ButtonsState<MouseButtonType, 8>;
-        using MouseGroup       = DeviceGroup<MouseButtonstate>;
-
-        MouseGroup fMouseDevicesState;
-        LInput::RawInput fRawInput;
-        void OnRawInput(const LInput::RawInput::RawInputEvent& evnt);
-        void OnMouseEvent(const LInput::ButtonStdExtension<MouseButtonType>::ButtonEvent& btnEvent);
-        void OnMouseInput(const LInput::RawInput::RawInputEventMouse& mouseInput);
-
-        MouseCaptureState fMouseCaptureState;
+        struct RawInputState;
+        struct NativeWindowState;
+        struct RawInputStateDeleter
+        {
+            void operator()(RawInputState* state) const noexcept;
+        };
+        struct NativeWindowStateDeleter
+        {
+            void operator()(NativeWindowState* state) const noexcept;
+        };
+        std::unique_ptr<RawInputState, RawInputStateDeleter> fRawInputState;
+        std::unique_ptr<NativeWindowState, NativeWindowStateDeleter> fNativeWindowState;
 
         bool fIsGridEnabled                         = false;
         OIV_PROP_TransparencyMode fTransparencyMode = OIV_PROP_TransparencyMode::TM_Medium;
         OIVBaseImageSharedPtr fAutoScrollAnchor;
-        DWORD fMainThreadID = GetCurrentThreadId();
+        std::thread::id fMainThreadID = std::this_thread::get_id();
         SelectionRect fSelectionRect;
         uint32_t fQueueResamplingDelay        = 50;
         LLUtils::RectI32 fImageSpaceSelection = LLUtils::RectI32::Zero;
@@ -392,8 +401,8 @@ namespace OIV
         LLUtils::PointF64 fDPIadjustmentFactor{1.0, 1.0};
         IMCodec::ImageLoader fImageLoader;
         std::unique_ptr<ImageOpenController> fImageOpenController;
-        //LWS::ClipboardFormatType fRTFFormatID {};
-        //LWS::ClipboardFormatType fHTMLFormatID {};
+        // LWS::ClipboardFormatType fRTFFormatID {};
+        // LWS::ClipboardFormatType fHTMLFormatID {};
 
         DeletedFileRemovalMode fDeletedFileRemovalMode = DeletedFileRemovalMode::DeletedInternally;
 
@@ -403,9 +412,6 @@ namespace OIV
         LLUtils::native_string_type DefaultTextKeyColorTag   = LLUTILS_TEXT("<textcolor=#ff8930ff>");
         LLUtils::native_string_type DefaultTextValueColorTag = LLUTILS_TEXT("<textcolor=#7672ffff>");
         LLUtils::StopWatch fFileDisplayTimer;
-        MouseMultiClickHandler fMouseClickEventHandler{500, 2};
-        void OnMouseMultiClick(const MouseMultiClickHandler::EventArgs& args);
-
         ResetTransformationMode fResetTransformationMode           = ResetTransformationMode::ResetAll;
         const OIV_CMD_ColorExposure_Request DefaultColorCorrection = {1.0, 0.0, 1.0, 1.0, 1.0};
         OIV_CMD_ColorExposure_Request fColorExposure               = DefaultColorCorrection;
@@ -418,7 +424,7 @@ namespace OIV
         ImageState fImageState;
 
         CommandController fCommandController;
-        OivRenderGateway fRenderGateway;
+        std::unique_ptr<IViewerRenderPort> fRenderGateway;
         std::unique_ptr<FreeType::FreeTypeConnector> fFreeType;
         LabelManager fLabelManager;
         KeyDoubleTap fDoubleTap;
@@ -429,10 +435,9 @@ namespace OIV
         LWS::FileDialogFilterBuilder fOpenComDlgFilters;
         LWS::FileDialogFilterBuilder fSaveComDlgFilters;
         LLUtils::native_string_type fDefaultSaveFileExtension = LLUTILS_TEXT("png");
-        int16_t fDefaultSaveFileFormatIndex    = -1;
+        int16_t fDefaultSaveFileFormatIndex                   = -1;
         LLUtils::native_string_type fPendingFolderLoad;
         LLUtils::StopWatch fLastImageLoadTimeStamp;
-        LWS::NotificationIconGroup fNotificationIcons;
         LWS::NotificationIconGroup::IconID fNotificationIconID;
         std::unique_ptr<MessageManager> fMessageManager;
         void OnSettingChange(const LLUtils::native_string_type& key, const LLUtils::native_string_type& value);
@@ -446,15 +451,7 @@ namespace OIV
         std::unique_ptr<ContextMenu<int>> fNotificationContextMenu;
         std::shared_ptr<OIVFileImage> fInitialFile;
 
-        LLUtils::LogFile mLogFile{GetLogFilePath(), true};
-
-        struct BindingElement
-        {
-            std::string commandDescription;
-            std::string command;
-            std::string arguments;
-        };
-        LInput::KeyBindings<BindingElement> fKeyBindings;
+        ApplicationLog mLogFile{GetLogFilePath(), true};
 
         struct MenuItemData
         {
@@ -472,7 +469,7 @@ namespace OIV
         EventSync fEventSync;
         std::atomic_bool fIsShuttingDown = false;
         ImageResidencyCache fImageResidencyCache;
-        Win32::FileWatcherWin32 fFileWatcher;
+        std::unique_ptr<IFileWatcher> fFileWatcher;
         std::unique_ptr<BrowseSessionController> fBrowseSessionController;
     };
 }  // namespace OIV

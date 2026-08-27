@@ -3,6 +3,7 @@
 #include "LabelManager.h"
 
 #include <functional>
+#include <LLUtils/StringUtility.h>
 #include <map>
 #include <string>
 
@@ -74,7 +75,7 @@ namespace OIV
                 RepositionLabels();
         }
 
-        void SetText(std::string elementName, const OIVString& text)
+        void SetText(std::string elementName, const LLUtils::native_string_type& text)
         {
             OIVTextImage* texelValue = GetOrCreateLabel(elementName);
             texelValue->SetText(text);

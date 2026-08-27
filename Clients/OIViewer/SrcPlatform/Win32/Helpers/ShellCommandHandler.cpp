@@ -1,4 +1,4 @@
-#include "ShellCommandHandler.h"
+#include "Helpers/ShellCommandHandler.h"
 
 #include "PhotoshopFinder.h"
 
@@ -14,34 +14,30 @@
 namespace OIV
 {
     LLUtils::native_string_type ShellCommandHandler::Execute(const CommandManager::CommandRequest& request,
-                                              const LLUtils::native_string_type& openedFileName,
-                                              OIVBaseImageSharedPtr openedImage)
+                                                             const LLUtils::native_string_type& openedFileName,
+                                                             OIVBaseImageSharedPtr openedImage)
     {
-        const std::string command = request.args.GetArgValue("cmd");
+        const std::string command          = request.args.GetArgValue("cmd");
         LLUtils::native_string_type result = LLUtils::StringUtility::ToWString(request.displayName);
 
         if (command == "newWindow")
         {
-            ShellExecute(nullptr,
-                         LLUTILS_TEXT("open"),
+            ShellExecute(nullptr, LLUTILS_TEXT("open"),
                          LLUtils::StringUtility::ToNativeString(LLUtils::PlatformUtility::GetExePath()).c_str(),
-                         openedFileName.c_str(),
-                         nullptr,
-                         SW_SHOWDEFAULT);
+                         openedFileName.c_str(), nullptr, SW_SHOWDEFAULT);
         }
         else if (command == "openPhotoshop")
         {
             const LLUtils::native_string_type photoshopApplicationPath = PhotoshopFinder::FindPhotoshop();
             if (photoshopApplicationPath.empty() == false)
-                ShellExecute(nullptr, LLUTILS_TEXT("open"), photoshopApplicationPath.c_str(), openedFileName.c_str(), nullptr,
-                             SW_SHOWDEFAULT);
+                ShellExecute(nullptr, LLUTILS_TEXT("open"), photoshopApplicationPath.c_str(), openedFileName.c_str(),
+                             nullptr, SW_SHOWDEFAULT);
         }
         else if (command == "openWithGoogleMaps")
         {
             if (openedImage != nullptr)
             {
-                if (openedImage->GetImage() != nullptr &&
-                   openedImage->GetMetaData() != nullptr &&
+                if (openedImage->GetImage() != nullptr && openedImage->GetMetaData() != nullptr &&
                     openedImage->GetMetaData()->exifData.latitude != std::numeric_limits<double>::max())
                 {
                     const auto& exifData = openedImage->GetMetaData()->exifData;
@@ -65,14 +61,11 @@ namespace OIV
         else if (command == "openWith")
         {
             if (openedFileName.empty() == false)
-                ShellExecute(nullptr,
-                             LLUTILS_TEXT("open"),
+                ShellExecute(nullptr, LLUTILS_TEXT("open"),
                              LLUtils::StringUtility::ToNativeString(request.args.GetArgValue("app")).c_str(),
-                             openedFileName.c_str(),
-                             nullptr,
-                             SW_SHOWDEFAULT);
+                             openedFileName.c_str(), nullptr, SW_SHOWDEFAULT);
         }
 
         return result;
     }
-}
+}  // namespace OIV
