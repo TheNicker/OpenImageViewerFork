@@ -32,7 +32,6 @@ jobs:
         -S "$GITHUB_WORKSPACE"
         -B "$BUILD_DIR"
         -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/mingw-w64-x86_64.cmake"
-        -DOIV_BUILD_RENDERER_GL=OFF
         -DIMCODEC_BUILD_CODEC_WEBP=OFF
         -DFREETYPE_WRAPPER_BUILD_FRIBIDI=OFF
         -DMINGW_POST_BUILD_DONT_COPY_BINARIES=ON
@@ -54,7 +53,6 @@ jobs:
     - name: Configure CMake
       run: >
         cmake -B "$env:BUILD_DIR"
-        -DOIV_BUILD_RENDERER_GL=OFF
         -S "$env:GITHUB_WORKSPACE"
 
     - name: Build

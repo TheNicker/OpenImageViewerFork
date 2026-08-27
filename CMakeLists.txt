@@ -176,6 +176,12 @@ add_subdirectory(./External/LWS)
     option(IMCODEC_BUILD_EXAMPLES "Build Codec FREEIMAGE" FALSE)
     add_subdirectory(./External/ImageCodec)
 
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        if(TARGET zlib)
+            set_target_properties(zlib PROPERTIES OUTPUT_NAME oiv_z)
+        endif()
+    endif()
+
 if (OIV_BUILD_CLIENT OR OIV_BUILD_TESTS)
     add_subdirectory(OIVLib)
     add_subdirectory(OIVAppCore)

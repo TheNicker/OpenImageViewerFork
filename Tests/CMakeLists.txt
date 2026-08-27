@@ -36,6 +36,11 @@ target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../
 target_compile_definitions(${TargetName} PRIVATE OIV_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\")
 target_link_libraries(${TargetName} PRIVATE Catch2::Catch2WithMain oivshared oivappcore ImageCodec tiff LWSLib)
 
+if(OIV_BUILD_RENDERER_GL)
+    target_compile_definitions(${TargetName} PRIVATE OIV_TEST_GL_RENDERER)
+    target_link_libraries(${TargetName} PRIVATE OIVGLRenderer)
+endif()
+
 if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     target_link_options(${TargetName} PRIVATE "/SUBSYSTEM:CONSOLE")
     target_link_options(${TargetName} PRIVATE "/ENTRY:wmainCRTStartup")

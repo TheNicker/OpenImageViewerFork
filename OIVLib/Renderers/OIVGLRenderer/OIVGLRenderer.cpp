@@ -1,128 +1,285 @@
-#include <LLUtils/StringDefs.h>
 #include "OIVGLRenderer.h"
-#include "GLRenderer/Quad.h"
+
+#include <ImageUtil/ImageUtil.h>
+
+#include <stdexcept>
+
 namespace OIV
 {
-    OIVGLRenderer::OIVGLRenderer()
+    namespace
     {
-        memset(&fUVScale, 0, sizeof(GLfloat) * 2);
-        memset(&fUVffset, 0, sizeof(GLfloat) * 2);
-        memset(&fImageSize, 0, sizeof(GLfloat) * 2);
-        memset(&fViewportSize, 0, sizeof(GLfloat) * 2);
-        GLint uShowGrid = 0;
-        fIsParamsDirty  = true;
+        constexpr char VertexShader[] = R"glsl(
+#version 130
+in vec2 position;
+out vec2 coords;
+
+void main()
+{
+    coords = position * 0.5 + 0.5;
+    coords.y = 1.0 - coords.y;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+)glsl";
+
+        constexpr char FragmentShader[] = R"glsl(
+#version 130
+in vec2 coords;
+out vec4 outColor;
+
+uniform sampler2D imageTexture;
+uniform vec2 viewportSize;
+uniform vec2 imageSize;
+uniform vec2 imageScale;
+uniform vec2 imageOffset;
+uniform vec4 backgroundColor1;
+uniform vec4 backgroundColor2;
+uniform vec4 transparencyColor1;
+uniform vec4 transparencyColor2;
+uniform float opacity;
+uniform float exposure;
+uniform float colorOffset;
+uniform float gamma;
+uniform float saturation;
+uniform int imageRenderMode;
+uniform int showGrid;
+
+void main()
+{
+    vec2 uvScale = viewportSize / (imageSize * imageScale);
+    vec2 uv = coords * uvScale - imageOffset / viewportSize * uvScale;
+    vec2 checker = mod(floor(gl_FragCoord.xy / 16.0), 2.0);
+    bool firstCheckerColor = checker.x == checker.y;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+    {
+        if (imageRenderMode == 1)
+            outColor = firstCheckerColor ? backgroundColor1 : backgroundColor2;
+        else
+            discard;
+        return;
+    }
+
+    vec4 sampled = texture(imageTexture, uv);
+    vec3 corrected = pow(max(sampled.rgb * exposure + colorOffset, 0.0), vec3(1.0 / max(gamma, 0.0001)));
+    float luminance = dot(corrected, vec3(0.299, 0.587, 0.114));
+    corrected = mix(vec3(luminance), corrected, saturation);
+
+    if (imageRenderMode == 1)
+    {
+        vec4 checkerColor = firstCheckerColor ? transparencyColor1 : transparencyColor2;
+        outColor = vec4(mix(checkerColor.rgb, corrected, sampled.a), opacity);
+    }
+    else
+    {
+        outColor = vec4(corrected, sampled.a * opacity);
+    }
+
+    if (showGrid == 1)
+    {
+        vec2 pixel = abs(fract(uv * imageSize) - 0.5);
+        if (max(imageScale.x, imageScale.y) >= 8.0 && (pixel.x > 0.47 || pixel.y > 0.47))
+            outColor.rgb = mix(outColor.rgb, vec3(1.0, 0.25, 0.25), 0.65);
+    }
+}
+)glsl";
+
+        std::array<float, 4> ToFloatColor(LLUtils::Color color)
+        {
+            const LLUtils::ColorF32 floatColor = static_cast<LLUtils::ColorF32>(color);
+            return floatColor.channels;
+        }
+    }  // namespace
+
+    OIVGLRenderer::~OIVGLRenderer()
+    {
+        if (fVertexArray != 0)
+            glDeleteVertexArrays(1, &fVertexArray);
     }
 
     void OIVGLRenderer::PrepareResources()
     {
-        using namespace OIV;
+        fContext.SetSwapInterval(0);
 
-        // Disable vsync
-        context.SetSwapInterval(0);
+        glGenVertexArrays(1, &fVertexArray);
+        glBindVertexArray(fVertexArray);
 
-        glGenVertexArrays(1, &vao);
-        glBindVertexArray(vao);
-        LLUtils::native_string_type vertexShaderPath   = LLUTILS_TEXT("./Resources/Programs/QuadVP.shader");
-        LLUtils::native_string_type fragmentShaderPath = LLUTILS_TEXT("./Resources/Programs/QuadFP.shader");
-
-        fProgram = GLGpuProgramUniquePtr(new GLGpuProgram(LLUtils::File::ReadAllText(vertexShaderPath).c_str(),
-                                                          LLUtils::File::ReadAllText(fragmentShaderPath).c_str()));
+        fProgram = std::make_unique<GLGpuProgram>(VertexShader, FragmentShader);
+        fQuad    = std::make_unique<Quad>();
 
         fProgram->Bind();
-        fTexture = GLTextureUniquePtr(new GLTexture());
+        fQuad->Bind();
+        const GLint positionAttribute = glGetAttribLocation(fProgram->GetProgram(), "position");
+        glVertexAttribPointer(positionAttribute, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(positionAttribute);
+        fProgram->SetUniform1I("imageTexture", 0);
 
-        Quad quad;
-        GLint posAttrib = glGetAttribLocation(fProgram->GetProgram(), "position");
-        glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
-        glEnableVertexAttribArray(posAttrib);
-        glClearColor(0.0f, 0.f, 0.f, 1.0f);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
 
     int OIVGLRenderer::Init(const OIV_RendererInitializationParams& initParams)
     {
-        context.init(reinterpret_cast<HWND>(initParams.container));
-        glewInit();
+        fContext.Init(initParams.container, initParams.nativeDisplay);
+        glewExperimental      = GL_TRUE;
+        const GLenum glewCode = glewInit();
+        if (glewCode != GLEW_OK)
+            throw std::runtime_error("Could not initialize GLEW: " +
+                                     std::string(reinterpret_cast<const char*>(glewGetErrorString(glewCode))));
+
+        // GLEW can leave GL_INVALID_ENUM behind while probing a compatibility context.
+        glGetError();
         PrepareResources();
-        glClearColor(0.0f, 0.f, 0.f, 0.0f);
         return 0;
     }
 
     int OIVGLRenderer::SetViewParams(const ViewParameters& viewParams)
     {
         UpdateViewportSize(static_cast<int>(viewParams.uViewportSize.x), static_cast<int>(viewParams.uViewportSize.y));
-        fShowGrid      = viewParams.showGrid ? 1 : 0;
-        fIsParamsDirty = true;
+        fTransparencyColors[0] = ToFloatColor(viewParams.uTransparencyColor1);
+        fTransparencyColors[1] = ToFloatColor(viewParams.uTransparencyColor2);
+        fShowGrid              = viewParams.showGrid;
         return 0;
     }
 
     int OIVGLRenderer::Redraw()
     {
-        renderOneFrame();
+        glClearColor(DefaultCanvasColor[0], DefaultCanvasColor[1], DefaultCanvasColor[2], DefaultCanvasColor[3]);
+        glClear(GL_COLOR_BUFFER_BIT);
+        RenderImages(IRM_MainImage);
+        RenderImages(IRM_Overlay);
+        fContext.SwapBuffers();
         return 0;
     }
 
     int OIVGLRenderer::SetFilterLevel(OIV_Filter_type filterLevel)
     {
-        // TODO: implement
-        return 0;
-    }
-
-    int OIVGLRenderer::SetImageBuffer(uint32_t id, const IMCodec::ImageSharedPtr image)
-    {
-        fImageSize[0]  = static_cast<GLfloat>(image->GetWidth());
-        fImageSize[1]  = static_cast<GLfloat>(image->GetHeight());
-        fIsParamsDirty = true;
-        fTexture->SetRGBATexture(image->GetWidth(), image->GetHeight(), image->GetBuffer());
+        fFilterType = filterLevel;
         return 0;
     }
 
     int OIVGLRenderer::SetSelectionRect(VisualSelectionRect selectionRect)
     {
+        fSelectionRect = selectionRect;
         return 0;
     }
 
     int OIVGLRenderer::SetExposure(const OIV_CMD_ColorExposure_Request& exposure)
     {
+        fExposure   = static_cast<float>(exposure.exposure);
+        fOffset     = static_cast<float>(exposure.offset);
+        fGamma      = static_cast<float>(exposure.gamma);
+        fSaturation = static_cast<float>(exposure.saturation);
         return 0;
     }
 
-    int OIVGLRenderer::SetImageProperties(const OIV_CMD_ImageProperties_Request&)
+    int OIVGLRenderer::SetBackgroundColor(int index, LLUtils::Color backgroundColor)
     {
+        fBackgroundColors.at(static_cast<size_t>(index)) = ToFloatColor(backgroundColor);
         return 0;
     }
 
-    int OIVGLRenderer::RemoveImage(uint32_t id)
+    int OIVGLRenderer::AddRenderable(IRenderable* renderable)
     {
+        if (renderable == nullptr)
+            throw std::invalid_argument("Cannot add a null OpenGL renderable");
+
+        const bool inserted = fImageEntries.emplace(renderable->GetID(), ImageEntry{.renderable = renderable}).second;
+        if (!inserted)
+            throw std::runtime_error("Cannot add the same OpenGL renderable twice");
+
         return 0;
     }
 
-    void OIVGLRenderer::renderOneFrame()
+    int OIVGLRenderer::RemoveRenderable(IRenderable* renderable)
     {
-        UpdateGpuParams();
-        glClear(GL_COLOR_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-        context.swapBuffers();
+        if (renderable == nullptr || fImageEntries.erase(renderable->GetID()) == 0)
+            throw std::runtime_error("Cannot remove an unknown OpenGL renderable");
+
+        return 0;
     }
 
-    void OIVGLRenderer::UpdateViewportSize(int x, int y)
+    void OIVGLRenderer::RenderImages(OIV_Image_Render_mode renderMode)
     {
-        glViewport(0, 0, x, y);
-        fIsParamsDirty   = true;
-        fViewportSize[0] = static_cast<GLfloat>(x);
-        fViewportSize[1] = static_cast<GLfloat>(y);
-        fIsParamsDirty   = true;
-    }
-
-    void OIVGLRenderer::UpdateGpuParams()
-    {
-        if (fIsParamsDirty == true)
+        for (auto& item : fImageEntries)
         {
-            fProgram->SetUniform2F("uvScale", fUVScale[0], fUVScale[1]);
-            fProgram->SetUniform2F("uImageSize", fImageSize[0], fImageSize[1]);
-            fProgram->SetUniform2F("uvOffset", fUVffset[0], fUVffset[1]);
-            fProgram->SetUniform2F("uViewportSize", fViewportSize[0], fViewportSize[1]);
-            fProgram->SetUniform1I("uShowGrid", fShowGrid);
-            fIsParamsDirty = false;
+            ImageEntry& entry = item.second;
+            if (entry.renderable->GetImageRenderMode() == renderMode)
+                DrawImage(entry);
         }
+    }
+
+    void OIVGLRenderer::DrawImage(ImageEntry& entry)
+    {
+        IRenderable& renderable = *entry.renderable;
+        if (!renderable.GetVisible() || renderable.GetOpacity() <= 0.0)
+            return;
+
+        renderable.PreRender();
+        if (renderable.GetIsImageDirty() || entry.texture == nullptr)
+        {
+            IMCodec::ImageSharedPtr image = renderable.GetImage();
+            if (image == nullptr)
+                return;
+
+            if (image->GetTexelFormat() != IMCodec::TexelFormat::I_R8_G8_B8_A8)
+                image = IMUtil::ImageUtil::Convert(image, IMCodec::TexelFormat::I_R8_G8_B8_A8);
+            if (image == nullptr)
+                throw std::runtime_error("Could not convert an image for OpenGL rendering");
+
+            if (entry.texture == nullptr)
+                entry.texture = std::make_unique<GLTexture>();
+
+            entry.texture->SetRGBATexture(image->GetWidth(), image->GetHeight(), image->GetBuffer());
+            entry.width  = image->GetWidth();
+            entry.height = image->GetHeight();
+            renderable.ClearImageDirty();
+        }
+
+        const OIV_Filter_type filter = renderable.GetFilterType() == FT_Lanczos3 ? fFilterType
+                                                                                 : renderable.GetFilterType();
+        entry.texture->SetFilter(filter == FT_None ? GL_NEAREST : GL_LINEAR);
+        entry.texture->Bind();
+        UpdateGpuParams(entry);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
+
+    void OIVGLRenderer::UpdateViewportSize(int width, int height)
+    {
+#if defined(OIV_GL_WAYLAND)
+        const bool firstWaylandResize = fViewportSize[0] == 0.0F && fViewportSize[1] == 0.0F && width > 0 && height > 0;
+#endif
+        fContext.Resize(width, height);
+        glViewport(0, 0, width, height);
+        fViewportSize = {static_cast<float>(width), static_cast<float>(height)};
+#if defined(OIV_GL_WAYLAND)
+        if (firstWaylandResize)
+        {
+            // Mesa acquires the initial 1x1 EGL buffer while creating the context. Retire it after resizing so the
+            // first rendered frame uses a buffer matching the Wayland surface geometry.
+            fContext.SwapBuffers();
+        }
+#endif
+    }
+
+    void OIVGLRenderer::UpdateGpuParams(const ImageEntry& entry) const
+    {
+        const LLUtils::PointF64 scale    = entry.renderable->GetScale();
+        const LLUtils::PointF64 position = entry.renderable->GetPosition();
+
+        fProgram->Bind();
+        fProgram->SetUniform2F("viewportSize", fViewportSize[0], fViewportSize[1]);
+        fProgram->SetUniform2F("imageSize", static_cast<float>(entry.width), static_cast<float>(entry.height));
+        fProgram->SetUniform2F("imageScale", static_cast<float>(scale.x), static_cast<float>(scale.y));
+        fProgram->SetUniform2F("imageOffset", static_cast<float>(position.x), static_cast<float>(position.y));
+        fProgram->SetUniform4F("backgroundColor1", fBackgroundColors[0].data());
+        fProgram->SetUniform4F("backgroundColor2", fBackgroundColors[1].data());
+        fProgram->SetUniform4F("transparencyColor1", fTransparencyColors[0].data());
+        fProgram->SetUniform4F("transparencyColor2", fTransparencyColors[1].data());
+        fProgram->SetUniform1F("opacity", static_cast<float>(entry.renderable->GetOpacity()));
+        fProgram->SetUniform1F("exposure", fExposure);
+        fProgram->SetUniform1F("colorOffset", fOffset);
+        fProgram->SetUniform1F("gamma", fGamma);
+        fProgram->SetUniform1F("saturation", fSaturation);
+        fProgram->SetUniform1I("imageRenderMode", entry.renderable->GetImageRenderMode());
+        fProgram->SetUniform1I("showGrid", fShowGrid ? 1 : 0);
     }
 }  // namespace OIV

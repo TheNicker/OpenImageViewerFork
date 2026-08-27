@@ -1,10 +1,10 @@
 #include "OIVGLRendererFactory.h"
 #include "OIVGLRenderer.h"
 
-namespace  OIV
+namespace OIV
 {
     IRendererSharedPtr GLRendererFactory::Create()
     {
-        return IRendererSharedPtr(new OIVGLRenderer());
+        return std::make_shared<OIVGLRenderer>();
     }
-}
+}  // namespace OIV

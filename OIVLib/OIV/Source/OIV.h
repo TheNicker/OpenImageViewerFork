@@ -31,14 +31,15 @@ namespace OIV
         ResultCode GetKnownFileTypes(OIV_CMD_GetKnownFileTypes_Response& res) override;
         ResultCode ResampleImage(const OIV_CMD_Resample_Request& resampleRequest, ImageHandle& handle) override;
         ResultCode RegisterCallbacks(const OIV_CMD_RegisterCallbacks_Request& callbacks) override;
-        ResultCode GetSubImages(const OIV_CMD_GetSubImages_Request& request, OIV_CMD_GetSubImages_Response& res) override;
+        ResultCode GetSubImages(const OIV_CMD_GetSubImages_Request& request,
+                                OIV_CMD_GetSubImages_Response& res) override;
         IRenderer* GetRenderer() override;
         ResultCode SetBackgroundColor(int index, LLUtils::Color backgroundColor) override;
-        
+
         int Init() override;
-        int SetParent(std::size_t handle) override;
+        int SetParent(std::size_t handle, void* nativeDisplay) override;
         int Refresh() override;
-        
+
         IMCodec::ImageSharedPtr GetImage(ImageHandle handle) const override;
         ResultCode GetFileInformation(ImageHandle handle, OIV_CMD_QueryImageInfo_Response& information) override;
         int SetTexelGrid(const CmdRequestTexelGrid& viewParams) override;
@@ -97,12 +98,13 @@ namespace OIV
         std::map<ImageHandle, std::vector<ImageHandle>> fImageToChildren;
         IRendererSharedPtr fRenderer = nullptr;
         ViewParameters fViewParams = {};
-        std::size_t fParent = 0;
-        bool fShowGrid = false;
-        LLUtils::PointI32 fClientSize = LLUtils::PointI32::Zero;
+        std::size_t fParent                          = 0;
+        void* fNativeDisplay                         = nullptr;
+        bool fShowGrid                               = false;
+        LLUtils::PointI32 fClientSize                = LLUtils::PointI32::Zero;
         OIV_CMD_RegisterCallbacks_Request fCallBacks = {};
         Resampler fResampler;
         std::vector<IRenderable*> fPendingRenderables;
 #pragma endregion
     };
-}
+}  // namespace OIV

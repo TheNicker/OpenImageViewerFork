@@ -20,13 +20,20 @@ namespace OIV
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
+        bool handled = false;
         if (std::holds_alternative<LWS::EventResize>(eventData))
         {
             fRefreshOperation.Begin();
             UpdateWindowSize();
             fRefreshOperation.End();
+            handled = true;
         }
-        return 0;
+        else if (std::holds_alternative<LWS::EventPaint>(eventData))
+        {
+            fRenderGateway->ResumePresentation();
+            handled = true;
+        }
+        return handled;
     }
 
     bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
