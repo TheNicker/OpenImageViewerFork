@@ -47,11 +47,10 @@ jobs:
             throw "$($result.FailedCount) release publishing tests failed."
         }
 
-    - name: Install linker
-      if: matrix.compiler.name == 'clang'
+    - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y lld
+        sudo apt-get install -y libgl1-mesa-dev libgtk-3-dev libwayland-dev libx11-dev lld wayland-protocols
 
     - name: Configure CMake
       run: >
@@ -65,13 +64,12 @@ jobs:
         -DCMAKE_SHARED_LINKER_FLAGS=${{ matrix.compiler.linker_flags }}
         -DCMAKE_MODULE_LINKER_FLAGS=${{ matrix.compiler.linker_flags }}
         -DCMAKE_BUILD_TYPE=Release
-        -DOIV_BUILD_CLIENT=OFF
-        -DOIV_BUILD_RENDERER_GL=OFF
+        -DOIV_BUILD_CLIENT=ON
         -DOIV_BUILD_TESTS=ON
         -DIMCODEC_BUILD_EXAMPLES=OFF
 
-    - name: Build tests
-      run: cmake --build "$BUILD_DIR" --target tests -- -j$(nproc)
+    - name: Build tests and viewer
+      run: cmake --build "$BUILD_DIR" --target tests OIViewer -- -j$(nproc)
 
     - name: Run tests
       run: "$BUILD_DIR/bin/tests"
