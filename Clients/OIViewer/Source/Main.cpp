@@ -1,95 +1,50 @@
-#ifdef _WIN32
-#include <windows.h>
-#include <shellapi.h>
-#include "Win32/UserMessages.h"
-#endif
+#include "Main.h"
 
-#include <ViewerApplication.h>
+#include "ViewerApplication.h"
+
+#include <LLUtils/Exception.h>
 #include <LWS/Platform.hpp>
 
+#include <cstdlib>
 #include <stdexcept>
 
-LLUtils::native_string_type CompileFilePathFromArguments(int argc, const wchar_t** argv)
+LLUtils::native_string_type CompileFilePathFromArguments(int argc, const LLUtils::native_char_type* const* argv)
 {
     LLUtils::native_string_type filePath;
-
     if (argc > 1)
     {
         filePath = argv[1];
-        for (int i = 2; i < argc; i++)
-            filePath += LLUtils::native_string_type(LLUTILS_TEXT(" ")) + argv[i];
+        for (int index = 2; index < argc; ++index)
+            filePath += LLUtils::native_string_type(LLUTILS_TEXT(" ")) + argv[index];
     }
-
     return filePath;
 }
 
-void RunApp(const LLUtils::native_string_type& filePath)
+int RunViewer(const LLUtils::native_string_type& filePath)
 {
-    const LWS::Platform::Session platformSession;
-    if (!platformSession)
-        throw std::runtime_error("Unable to initialize the LWS platform");
-
-    OIV::ViewerApplication viewerApplication;
-    viewerApplication.Init(filePath);
-    viewerApplication.Run();
-}
-
-
-#ifdef _WIN32
-
-int mainFunction(int argc, const wchar_t** argv)
-{
-    using namespace OIV;
-    LLUtils::native_string_type filePath = CompileFilePathFromArguments(argc, argv);
-
-    if (filePath.empty() == false)
+    try
     {
-        HWND window = ViewerApplication::FindTrayBarWindow();
-        if (window != nullptr)
-        {
-            filePath = LLUtils::FileSystemHelper::ResolveFullPath(filePath);
-            COPYDATASTRUCT copyData{};
-            copyData.dwData = ::OIV::Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY;
-            copyData.cbData = static_cast<DWORD>((filePath.length() + 1) * sizeof(decltype(filePath)::value_type));
-            copyData.lpData = const_cast<wchar_t*>(filePath.c_str());
-            ::SendMessage(window, WM_COPYDATA, ::OIV::Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY, (LPARAM)(LPVOID)&copyData);
-        }
-        else
-        {
-            RunApp(filePath);
-        }
+        const LWS::Platform::Session platformSession;
+        if (!platformSession)
+            throw std::runtime_error("Unable to initialize the LWS platform");
+
+        OIV::ViewerApplication viewerApplication;
+        viewerApplication.Init(filePath);
+        viewerApplication.Run();
+        return EXIT_SUCCESS;
     }
-    else
+    catch (const LLUtils::Exception&)
     {
-        RunApp(filePath);
+        return EXIT_FAILURE;
     }
-    
-    return 0;
+    catch (const std::exception& exception)
+    {
+        LL_EXCEPTION_DONT_THROW(LLUtils::Exception::ErrorCode::RuntimeError, exception.what());
+        return EXIT_FAILURE;
+    }
+    catch (...)
+    {
+        LL_EXCEPTION_DONT_THROW(LLUtils::Exception::ErrorCode::Unknown, "Unhandled application exception");
+        return EXIT_FAILURE;
+    }
 }
-
-int WinMain(
-         [[maybe_unused]] _In_      HINSTANCE hInstance,
-         [[maybe_unused]] _In_opt_  HINSTANCE hPrevInstance,
-         [[maybe_unused]] _In_      LPSTR     lpCmdLine,
-         [[maybe_unused]] _In_      int       nCmdShow
-)
-{
-    int nArgs;
-    wchar_t** str = CommandLineToArgvW(GetCommandLineW(), &nArgs);
-    return mainFunction(nArgs, const_cast<const wchar_t**>(str));
-}
-
-int _tmain(int argc, const TCHAR** argv)
-{
-    return mainFunction(argc, argv);
-}
-
-#else
-
-// int main(int argc, const char** argv)
-int main(int argc, char* argv[])
-{
-    //return mainFunction(argc, argv);
-    RunApp({});
-}
-#endif

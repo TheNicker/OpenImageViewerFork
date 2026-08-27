@@ -14,10 +14,27 @@ if(NOT TARGET Catch2::Catch2WithMain)
 endif()
 
 add_executable (${TargetName} ${sourceFiles})
+target_sources(${TargetName} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/Source/ImageList.cpp
+)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_sources(${TargetName} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Win32/ContextMenuBackend.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Win32/ImageList.cpp
+    )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(${TargetName} PRIVATE OIV_TEST_PLATFORM_LINUX)
+    target_sources(${TargetName} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ContextMenuBackend.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ImageList.cpp
+    )
+endif()
 target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/json/include)
 target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer)
+target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/Source)
 target_compile_definitions(${TargetName} PRIVATE OIV_TEST_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\")
-target_link_libraries(${TargetName} PRIVATE Catch2::Catch2WithMain oivshared oivappcore ImageCodec tiff)
+target_link_libraries(${TargetName} PRIVATE Catch2::Catch2WithMain oivshared oivappcore ImageCodec tiff LWSLib)
 
 if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     target_link_options(${TargetName} PRIVATE "/SUBSYSTEM:CONSOLE")

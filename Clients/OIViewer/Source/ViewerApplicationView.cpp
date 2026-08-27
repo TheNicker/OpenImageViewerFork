@@ -6,24 +6,16 @@
 
 #include "ViewerApplication.h"
 
-#include <Windows.h>
 #include <Version.h>
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-
-#include <LInput/Keys/KeyCombination.h>
-#include <LInput/Keys/KeyBindings.h>
-#include <LInput/Buttons/Extensions/ButtonsStdExtension.h>
-#include <LInput/Mouse/MouseButton.h>
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
 #include <LLUtils/PlatformUtility.h>
 #include <LLUtils/StringUtility.h>
 #include <LLUtils/UniqueIDProvider.h>
-#include <LLUtils/Logging/LogPredefined.h>
-#include <LLUtils/Logging/Logger.h>
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
@@ -33,7 +25,6 @@
 #include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
-#include "Win32/UserMessages.h"
 #include "OIVCommands.h"
 
 #include "OIVImage/OIVFileImage.h"
@@ -45,7 +36,6 @@
 #include "Globals.h"
 #include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
-#include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
 #include <OIVAppCore/ColorCorrectionCommandPolicy.h>
 #include <OIVAppCore/FileChangePolicy.h>
@@ -67,16 +57,14 @@
 #include <ImageUtil/ImageUtil.h>
 #include "InterThreadMessages.h"
 
-#include "Resource.h"
-
 namespace OIV
 {
     void ViewerApplication::OnSelectionRectChanged(const LLUtils::RectI32& selectionRect, bool isVisible)
     {
         if (isVisible)
-            fRenderGateway.SetSelectionRect(selectionRect);
+            fRenderGateway->SetSelectionRect(selectionRect);
         else
-            fRenderGateway.ClearSelectionRect();
+            fRenderGateway->ClearSelectionRect();
 
         fRefreshOperation.Queue();
     }
@@ -87,11 +75,10 @@ namespace OIV
     {
         Pan(panAmount);
 
-        const PanCursorHint cursorHint                 = InputGesturePolicy::CursorHintForPan(panAmount);
-        const Win32::MainWindow::CursorType cursorType = cursorHint.sizeAll
-                                                             ? Win32::MainWindow::CursorType::SizeAll
-                                                             : static_cast<Win32::MainWindow::CursorType>(
-                                                                   cursorHint.directionIndex + 2);
+        const PanCursorHint cursorHint          = InputGesturePolicy::CursorHintForPan(panAmount);
+        const MainWindow::CursorType cursorType = cursorHint.sizeAll ? MainWindow::CursorType::SizeAll
+                                                                     : static_cast<MainWindow::CursorType>(
+                                                                           cursorHint.directionIndex + 2);
         fWindow.SetCursorType(cursorType);
     }
 
@@ -110,7 +97,7 @@ namespace OIV
 
     void ViewerApplication::UpdateExposure()
     {
-        fRenderGateway.SetColorExposure(fColorExposure);
+        fRenderGateway->SetColorExposure(fColorExposure);
         fRefreshOperation.Queue();
     }
 
@@ -179,7 +166,7 @@ namespace OIV
         grid.gridSize         = fIsGridEnabled ? 1.0 : 0.0;
         grid.transparencyMode = fTransparencyMode;
         grid.generateMipmaps  = fDownScalingTechnique == DownscalingTechnique::HardwareMipmaps;
-        if (fRenderGateway.SetTexelGrid(grid) == RC_Success)
+        if (fRenderGateway->SetTexelGrid(grid) == RC_Success)
         {
             fRefreshOperation.Queue();
         }
@@ -232,10 +219,10 @@ namespace OIV
         if (IsImageOpen())
         {
             using namespace LLUtils;
-            SIZE clientSize = fWindow.GetCanvasSize();
-            if (clientSize.cx > 0 && clientSize.cy > 0)  // window might minimized.
+            const LWS::Size clientSize = fWindow.GetCanvasSize();
+            if (clientSize.x > 0 && clientSize.y > 0)  // window might minimized.
             {
-                const double zoom = ViewTransformController::FitScale(PointF64(clientSize.cx, clientSize.cy),
+                const double zoom = ViewTransformController::FitScale(PointF64(clientSize.x, clientSize.y),
                                                                       GetImageSize(ImageSizeType::Transformed));
                 fRefreshOperation.Begin();
                 fIsLockFitToScreen = true;
@@ -427,9 +414,10 @@ namespace OIV
                 PointF64 storageImageSpace = ClientToImage(fWindow.GetMousePosition());
 
                 LLUtils::native_stringstream ss;
-                ss << LLUTILS_TEXT("Texel: ") << std::fixed << std::setprecision(1) << std::setfill(L' ')
-                   << std::setw(6) << storageImageSpace.x << LLUTILS_TEXT(" X ") << std::fixed << std::setprecision(1)
-                   << std::setfill(L' ') << std::setw(6) << storageImageSpace.y;
+                ss << LLUTILS_TEXT("Texel: ") << std::fixed << std::setprecision(1)
+                   << std::setfill(LLUTILS_TEXT(" ")[0]) << std::setw(6) << storageImageSpace.x << LLUTILS_TEXT(" X ")
+                   << std::fixed << std::setprecision(1) << std::setfill(LLUTILS_TEXT(" ")[0]) << std::setw(6)
+                   << storageImageSpace.y;
                 fVirtualStatusBar.SetText("texelPos", ss.str());
 
                 // fWindow.SetStatusBarText(ss.str(), 2, 0);
@@ -439,11 +427,10 @@ namespace OIV
                 if (!(storageImageSpace.x < 0 || storageImageSpace.y < 0 || storageImageSpace.x >= storageImageSize.x ||
                       storageImageSpace.y >= storageImageSize.y))
                 {
-                    LLUtils::native_string_type message = StringUtility::ConvertString<OIVString>(
+                    LLUtils::native_string_type message = StringUtility::ToNativeString(
                         OIVHelper::ParseTexelValue(fImageState.GetImage(ImageChainStage::Deformed)->GetImage(),
                                                    static_cast<LLUtils::PointI32>(storageImageSpace)));
-                    OIVString txt = LLUtils::StringUtility::ConvertString<OIVString>(message);
-                    fVirtualStatusBar.SetText("texelValue", txt);
+                    fVirtualStatusBar.SetText("texelValue", message);
                     fVirtualStatusBar.SetOpacity("texelValue", 1.0);
                     fRefreshOperation.Queue();
                 }
@@ -468,18 +455,18 @@ namespace OIV
 
     void ViewerApplication::UpdateWindowSize()
     {
-        SIZE size = fWindow.GetCanvasSize();
+        const LWS::Size size = fWindow.GetCanvasSize();
 
-        if (size.cx > 0 && size.cy > 0)  // window might minimized.
+        if (size.x > 0 && size.y > 0)  // window might minimized.
         {
-            fRenderGateway.SetClientSize(static_cast<uint16_t>(size.cx), static_cast<uint16_t>(size.cy));
+            fRenderGateway->SetClientSize(static_cast<uint16_t>(size.x), static_cast<uint16_t>(size.y));
             // UpdateCanvasSize();
             AutoPlaceImage();
             auto point = static_cast<LLUtils::PointI32>(fWindow.GetCanvasSize());
             fVirtualStatusBar.ClientSizeChanged(point);
 
             EventManager::GetSingleton().SizeChange.Raise(
-                EventManager::SizeChangeEventParams{static_cast<int32_t>(size.cx), static_cast<int32_t>(size.cy)});
+                EventManager::SizeChangeEventParams{static_cast<int32_t>(size.x), static_cast<int32_t>(size.y)});
         }
     }
 

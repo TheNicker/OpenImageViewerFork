@@ -6,24 +6,16 @@
 
 #include "ViewerApplication.h"
 
-#include <Windows.h>
 #include <Version.h>
 
 #include <Functions.h>
 #include <ApiGlobal.h>
-
-#include <LInput/Keys/KeyCombination.h>
-#include <LInput/Keys/KeyBindings.h>
-#include <LInput/Buttons/Extensions/ButtonsStdExtension.h>
-#include <LInput/Mouse/MouseButton.h>
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
 #include <LLUtils/PlatformUtility.h>
 #include <LLUtils/StringUtility.h>
 #include <LLUtils/UniqueIDProvider.h>
-#include <LLUtils/Logging/LogPredefined.h>
-#include <LLUtils/Logging/Logger.h>
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
 
@@ -33,8 +25,8 @@
 #include <OIVAppCore/ShellIntegrationHelper.h>
 #include "Helpers/ShellCommandHandler.h"
 
-#include "Win32/UserMessages.h"
 #include "OIVCommands.h"
+#include "PlatformFileDialog.h"
 
 #include "OIVImage/OIVFileImage.h"
 #include "OIVImage/OIVRawImage.h"
@@ -45,7 +37,6 @@
 #include "Globals.h"
 #include <OIVAppCore/ConfigurationLoader.h>
 #include "CommandRegistry.h"
-#include "ExceptionHandler.h"
 #include <OIVAppCore/ColorCountPolicy.h>
 #include <OIVAppCore/ColorCorrectionCommandPolicy.h>
 #include <OIVAppCore/FileChangePolicy.h>
@@ -66,8 +57,6 @@
 #include <OIVShared/PixelHelper.h>
 #include <ImageUtil/ImageUtil.h>
 #include "InterThreadMessages.h"
-
-#include "Resource.h"
 
 namespace OIV
 {
@@ -332,15 +321,15 @@ namespace OIV
                         break;
                 }
 
-                auto result = LWS::FileDialog::Show(LWS::FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
-                                                    LLUTILS_TEXT("Save an image"), fWindow.GetHandle(),
-                                                    LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
-                                                    fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
+                auto result = PlatformFileDialog::Show(LWS::FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
+                                                       LLUTILS_TEXT("Save an image"), fWindow.GetHandle(),
+                                                       LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
+                                                       fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
 
                 if (result == LWS::FileDialogResult::Success)
                 {
                     LLUtils::native_string_type extension = LLUtils::StringUtility::ToLower(
-                        std::filesystem::path(saveFilePath).extension().wstring());
+                        std::filesystem::path(saveFilePath).extension().native());
                     LLUtils::native_string_view sv(extension);
 
                     if (sv.empty() == false)
@@ -363,9 +352,9 @@ namespace OIV
         else
         {
             LLUtils::native_string_type openFilePath;
-            auto result = LWS::FileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(),
-                                                LLUTILS_TEXT("Open image"), fWindow.GetHandle(), {}, 0, {},
-                                                openFilePath);
+            auto result = PlatformFileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(),
+                                                   LLUTILS_TEXT("Open image"), fWindow.GetHandle(), {}, 0, {},
+                                                   openFilePath);
 
             if (result == LWS::FileDialogResult::Success)
                 LoadFile(openFilePath, IMCodec::PluginTraverseMode::NoTraverse);
@@ -432,7 +421,7 @@ namespace OIV
                 break;
         }
 
-        result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+        result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
     }
 
     void ViewerApplication::CMD_SortFiles(const CommandManager::CommandRequest& request,
@@ -481,7 +470,7 @@ namespace OIV
         else if (type == "permanently")
             DeleteOpenedFile(true);
 
-        result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+        result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
     }
 
     void ViewerApplication::CMD_ColorCorrection(const CommandManager::CommandRequest& request,
@@ -558,7 +547,7 @@ namespace OIV
             if (IsOpenedImageIsAFile())
             {
                 fClipboardHelper.SetClipboardText(fWindow.GetHandle(), GetOpenedFileName().c_str());
-                result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+                result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
             }
         }
         else if (cmd == "selectedArea")
@@ -568,7 +557,7 @@ namespace OIV
                 result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
                     LLUTILS_TEXT("Cannot copy to clipboard"), res);
             else
-                result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+                result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
         }
         else if (cmd == "cut")
         {
@@ -577,7 +566,7 @@ namespace OIV
                 result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
                     LLUTILS_TEXT("Cannot cut selected area"), res);
             else
-                result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+                result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
         }
     }
 
@@ -610,14 +599,14 @@ namespace OIV
                 result.resValue = ViewerPresentationPolicy::FormatFailedOperation(
                     LLUTILS_TEXT("Cannot crop selected area"), res);
             else
-                result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+                result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
         }
 
         else if (cmd == "selectAll")
         {
             if (fImageState.GetOpenedImage() != nullptr)
             {
-                result.resValue = LLUtils::StringUtility::ToWString(request.displayName);
+                result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
                 using namespace LLUtils;
                 RectI32 imageInScreenSpace = static_cast<LLUtils::RectI32>(
                     ImageToClient({{0.0, 0.0}, {GetImageSize(ImageSizeType::Transformed)}}));
@@ -694,7 +683,7 @@ namespace OIV
     LLUtils::native_string_type IntToHex(T val)
     {
         LLUtils::native_stringstream ss;
-        ss << std::setfill(L'0') << std::setw(sizeof(T) * 2) << std::hex << val;
+        ss << std::setfill(LLUTILS_TEXT("0")[0]) << std::setw(sizeof(T) * 2) << std::hex << val;
 
         return ss.str();
     }
@@ -704,7 +693,8 @@ namespace OIV
         using namespace std;
         using namespace placeholders;
 
-        CommandRegistry::AddConfiguredCommandsAndKeyBindings(fCommandController.GetCommandManager(), fKeyBindings);
+        CommandRegistry::AddConfiguredCommands(fCommandController.GetCommandManager());
+        AddPlatformKeyBindings();
         fCommandController.AddCommandCallbacks(
             {{"cmd_color_correction", std::bind(&ViewerApplication::CMD_ColorCorrection, this, _1, _2)},
              {"cmd_view_state", std::bind(&ViewerApplication::CMD_ViewState, this, _1, _2)},
