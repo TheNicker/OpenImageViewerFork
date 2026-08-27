@@ -8,49 +8,12 @@
 #include <cstdlib>
 #include <filesystem>
 
+#ifdef LWS_PLATFORM_WAYLAND
+    #include <LWS/Wayland/PlatformWayland.hpp>
+#endif
+
 namespace OIV
 {
-    namespace
-    {
-        class ViewerRenderPortLinux final : public IViewerRenderPort
-        {
-          public:
-
-            void Initialize([[maybe_unused]] std::size_t canvasHandle) override {}
-            ResultCode Refresh() override { return RC_NotImplemented; }
-
-            void SetSelectionRect([[maybe_unused]] const LLUtils::RectI32& rect) override
-            {
-                LL_EXCEPTION_NOT_IMPLEMENT("Selection rendering is not implemented on Linux");
-            }
-
-            void ClearSelectionRect() override
-            {
-                LL_EXCEPTION_NOT_IMPLEMENT("Selection rendering is not implemented on Linux");
-            }
-
-            ResultCode SetColorExposure([[maybe_unused]] const OIV_CMD_ColorExposure_Request& exposure) override
-            {
-                LL_EXCEPTION_NOT_IMPLEMENT("Color correction rendering is not implemented on Linux");
-            }
-
-            ResultCode SetTexelGrid([[maybe_unused]] const CmdRequestTexelGrid& grid) override
-            {
-                LL_EXCEPTION_NOT_IMPLEMENT("Texel-grid rendering is not implemented on Linux");
-            }
-
-            ResultCode SetClientSize([[maybe_unused]] uint16_t width, [[maybe_unused]] uint16_t height) override
-            {
-                return RC_NotImplemented;
-            }
-
-            ResultCode RegisterCallbacks([[maybe_unused]] const OIV_CMD_RegisterCallbacks_Request& callbacks) override
-            {
-                return RC_NotImplemented;
-            }
-        };
-    }  // namespace
-
     LLUtils::native_string_type ViewerApplication::GetAppDataFolder()
     {
         const char* configHome = std::getenv("XDG_CONFIG_HOME");
@@ -85,7 +48,7 @@ namespace OIV
         fRawInputState.reset(new RawInputState());
         fNativeWindowState.reset(new NativeWindowState());
         fFileWatcher.reset();
-        fRenderGateway = std::make_unique<ViewerRenderPortLinux>();
+        fRenderGateway = std::make_unique<OivRenderGateway>(OivRenderGateway::PresentationState::Deferred);
     }
 
     void ViewerApplication::RawInputStateDeleter::operator()(RawInputState* state) const noexcept
@@ -103,7 +66,14 @@ namespace OIV
         fNotificationIconID = 0;
     }
 
-    void ViewerApplication::InitializeRenderer() {}
+    void ViewerApplication::InitializeRenderer()
+    {
+        void* nativeDisplay = nullptr;
+#ifdef LWS_PLATFORM_WAYLAND
+        nativeDisplay = LWS::Wayland::GetDisplay();
+#endif
+        fRenderGateway->Initialize(fWindow.GetCanvasWindow().GetHandle(), nativeDisplay);
+    }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(
         [[maybe_unused]] LWS::NotificationIconGroup::IconID iconId) const

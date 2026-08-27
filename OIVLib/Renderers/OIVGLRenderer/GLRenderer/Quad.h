@@ -1,29 +1,40 @@
 #pragma once
+
 #include <GL/glew.h>
 
-class Quad
+namespace OIV
 {
-public:
-    Quad()
+    class Quad
     {
-        static  GLfloat vertices[] =
+      public:
+
+        Quad()
         {
-            -1,  1, // top left corner
-            -1, -1, // bottom left corner
-            1,  1, // top right corner
-            1, -1, // bottom right corner
-        };
-        
-        glGenBuffers(1, &fVbo); // Generate 1 buffer
-        glBindBuffer(GL_ARRAY_BUFFER, fVbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    }
+            constexpr GLfloat vertices[] = {
+                -1.0F, 1.0F,   // top left
+                -1.0F, -1.0F,  // bottom left
+                1.0F,  1.0F,   // top right
+                1.0F,  -1.0F,  // bottom right
+            };
 
-    void Bind()
-    {
-        glBindBuffer(GL_ARRAY_BUFFER, fVbo);
-    }
+            glGenBuffers(1, &fVertexBuffer);
+            Bind();
+            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        }
 
-private:
-    GLuint fVbo;
-};
+        Quad(const Quad&)            = delete;
+        Quad& operator=(const Quad&) = delete;
+
+        ~Quad()
+        {
+            if (fVertexBuffer != 0)
+                glDeleteBuffers(1, &fVertexBuffer);
+        }
+
+        void Bind() const { glBindBuffer(GL_ARRAY_BUFFER, fVertexBuffer); }
+
+      private:
+
+        GLuint fVertexBuffer{};
+    };
+}  // namespace OIV

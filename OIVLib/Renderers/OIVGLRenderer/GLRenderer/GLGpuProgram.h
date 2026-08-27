@@ -1,88 +1,124 @@
 #pragma once
+
 #include <GL/glew.h>
+
+#include <memory>
+#include <stdexcept>
 #include <string>
+
 #include "GlError.h"
 
-class GLGpuProgram
+namespace OIV
 {
-    GLuint fFragmentShader;
-    GLuint fVertexShader;
-    GLuint fShaderProgram;
-public:
-
-    GLuint CreateShader(const char* shadersource, GLint type)
+    class GLGpuProgram
     {
-        GLuint shader = 0;
-        
-        if (OIV::GL_SUCCESS(shader = glCreateShader(type)) == false)
+      public:
+
+        GLGpuProgram(const char* vertexShaderSource, const char* fragmentShaderSource)
         {
-            throw std::exception((std::string("could not compile shader, reason:\n")).c_str());
+            try
+            {
+                fVertexShader   = CreateShader(vertexShaderSource, GL_VERTEX_SHADER);
+                fFragmentShader = CreateShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
+                fShaderProgram  = glCreateProgram();
+                if (fShaderProgram == 0)
+                    throw std::runtime_error("Could not create an OpenGL shader program");
+
+                glAttachShader(fShaderProgram, fVertexShader);
+                glAttachShader(fShaderProgram, fFragmentShader);
+                glBindFragDataLocation(fShaderProgram, 0, "outColor");
+                glLinkProgram(fShaderProgram);
+
+                GLint linked{};
+                glGetProgramiv(fShaderProgram, GL_LINK_STATUS, &linked);
+                if (linked != GL_TRUE)
+                    throw std::runtime_error("Could not link OpenGL shaders: " + GetProgramLinkError(fShaderProgram));
+            }
+            catch (...)
+            {
+                Release();
+                throw;
+            }
         }
 
-        //TODO: check all shader source has been uploaded
-        glShaderSource(shader, 1, &shadersource, nullptr);
-        glCompileShader(shader);
-        if (OIV::IsShaderCompiled(shader) == false)
+        GLGpuProgram(const GLGpuProgram&)            = delete;
+        GLGpuProgram& operator=(const GLGpuProgram&) = delete;
+
+        ~GLGpuProgram() { Release(); }
+
+        void Bind() const { glUseProgram(fShaderProgram); }
+
+        void SetUniform1I(const char* name, int value) const
         {
-            std::string error = OIV::GetShaderCompileError(shader);
-            throw std::exception((std::string("could not compile shader, reason:\n") + error).c_str());
+            const GLint location = glGetUniformLocation(fShaderProgram, name);
+            if (location >= 0)
+                glUniform1i(location, value);
         }
 
-        return shader;
-    }
-
-    void Bind() const
-    {
-        glUseProgram(fShaderProgram);
-    }
-
-    void SetUniform1I(std::string name, int i)
-    {
-        GLint location = glGetUniformLocation(fShaderProgram, name.c_str());
-        if (location != -1)
+        void SetUniform1F(const char* name, float value) const
         {
-            glUniform1i(location, i);
+            const GLint location = glGetUniformLocation(fShaderProgram, name);
+            if (location >= 0)
+                glUniform1f(location, value);
         }
-    }
 
-   void SetUniform2F(std::string name, float f1, float f2)
-    {
-        GLint location = glGetUniformLocation(fShaderProgram, name.c_str());
-        if (location != -1)
+        void SetUniform2F(const char* name, float first, float second) const
         {
-            glUniform2f(location, f1, f2);
+            const GLint location = glGetUniformLocation(fShaderProgram, name);
+            if (location >= 0)
+                glUniform2f(location, first, second);
         }
-    }
 
+        void SetUniform4F(const char* name, const float* values) const
+        {
+            const GLint location = glGetUniformLocation(fShaderProgram, name);
+            if (location >= 0)
+                glUniform4fv(location, 1, values);
+        }
 
-    GLGpuProgram(std::string vertexShaderSource, std::string fragmentShaderSource)
-    {
-        if (vertexShaderSource.empty() || fragmentShaderSource.empty())
-            throw std::exception("Shaders contents is incomplete");
-        
+        GLuint GetProgram() const { return fShaderProgram; }
 
-        const std::string prefix = "#version 150\n#define GLSL 1\n";
-        fFragmentShader = 0;
-        fVertexShader = 0;
-        fShaderProgram = 0;
-        vertexShaderSource = prefix + vertexShaderSource;
-        fragmentShaderSource = prefix + fragmentShaderSource;
-        fVertexShader = CreateShader(vertexShaderSource.c_str(), GL_VERTEX_SHADER);
-        fFragmentShader = CreateShader(fragmentShaderSource.c_str(), GL_FRAGMENT_SHADER);
-        fShaderProgram = glCreateProgram();
-        glAttachShader(fShaderProgram, fVertexShader);
-        glAttachShader(fShaderProgram, fFragmentShader);
-        glBindFragDataLocation(fShaderProgram, 0, "outColor");
+      private:
 
-        glLinkProgram(fShaderProgram);
-    }
+        void Release()
+        {
+            if (fShaderProgram != 0)
+                glDeleteProgram(fShaderProgram);
+            if (fFragmentShader != 0)
+                glDeleteShader(fFragmentShader);
+            if (fVertexShader != 0)
+                glDeleteShader(fVertexShader);
 
-    GLuint GetProgram() const
-    {
-        return fShaderProgram;
-    }
+            fShaderProgram  = 0;
+            fFragmentShader = 0;
+            fVertexShader   = 0;
+        }
 
+        static GLuint CreateShader(const char* shaderSource, GLenum type)
+        {
+            if (shaderSource == nullptr || shaderSource[0] == '\0')
+                throw std::invalid_argument("OpenGL shader source is empty");
 
-};
-typedef std::unique_ptr<GLGpuProgram> GLGpuProgramUniquePtr;
+            const GLuint shader = glCreateShader(type);
+            if (shader == 0)
+                throw std::runtime_error("Could not create an OpenGL shader");
 
+            glShaderSource(shader, 1, &shaderSource, nullptr);
+            glCompileShader(shader);
+            if (!IsShaderCompiled(shader))
+            {
+                const std::string error = GetShaderCompileError(shader);
+                glDeleteShader(shader);
+                throw std::runtime_error("Could not compile an OpenGL shader: " + error);
+            }
+
+            return shader;
+        }
+
+        GLuint fFragmentShader{};
+        GLuint fVertexShader{};
+        GLuint fShaderProgram{};
+    };
+
+    using GLGpuProgramUniquePtr = std::unique_ptr<GLGpuProgram>;
+}  // namespace OIV

@@ -11,6 +11,9 @@
 #include <Version.h>
 #include "Interfaces/IRendererDefs.h"
 
+#include <cstdlib>
+#include <filesystem>
+
 #if OIV_BUILD_RENDERER_D3D11 == 1
     #include <OIVD3D11RendererFactory.h>
 #endif
@@ -21,6 +24,34 @@
 
 namespace OIV
 {
+    namespace
+    {
+        OIVString GetRendererDataRoot()
+        {
+#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
+            const std::filesystem::path root = LLUtils::PlatformUtility::GetAppDataFolder();
+#else
+            std::filesystem::path root;
+            if (const char* cacheHome = std::getenv("XDG_CACHE_HOME"); cacheHome != nullptr && *cacheHome != '\0')
+                root = cacheHome;
+            else if (const char* userHome = std::getenv("HOME"); userHome != nullptr && *userHome != '\0')
+                root = std::filesystem::path(userHome) / ".cache";
+            else
+                root = std::filesystem::temp_directory_path();
+#endif
+            return LLUtils::StringUtility::ConvertString<OIVString>((root / "OIV").native());
+        }
+
+        constexpr const OIVCHAR* RendererName()
+        {
+#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32 && OIV_BUILD_RENDERER_D3D11 == 1
+            return OIV_TEXT("D3D11");
+#else
+            return OIV_TEXT("OpenGL");
+#endif
+        }
+    }  // namespace
+
     IRenderer* OIV::GetRenderer()
     {
         return fRenderer.get();
@@ -484,22 +515,21 @@ namespace OIV
 
         OIV_RendererInitializationParams params = {};
 
-        // TODO: add renderer properties to get a unique renderer name instead of hard coded "D3D11"
-        OIVString appDataPath = LLUtils::StringUtility::ConvertString<OIVString>(
-                                    LLUtils::PlatformUtility::GetAppDataFolder()) +
-                                +OIV_TEXT("/OIV/") +
+        OIVString appDataPath = GetRendererDataRoot() + OIV_TEXT("/") +
                                 LLUtils::StringUtility::ConvertString<OIVString>(FormatFullVersion(CurrentVersion)) +
-                                OIV_TEXT("/Renderer/D3D11/.");
-        params.container      = fParent;
+                                OIV_TEXT("/Renderer/") + RendererName() + OIV_TEXT("/.");
+        params.container     = fParent;
+        params.nativeDisplay = fNativeDisplay;
 
         params.dataPath = appDataPath.c_str();
         fRenderer->Init(params);
         return 0;
     }
 
-    int OIV::SetParent(std::size_t handle)
+    int OIV::SetParent(std::size_t handle, void* nativeDisplay)
     {
-        fParent = handle;
+        fParent        = handle;
+        fNativeDisplay = nativeDisplay;
         return 0;
     }
     int OIV::Refresh()

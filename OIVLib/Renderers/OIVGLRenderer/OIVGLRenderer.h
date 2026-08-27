@@ -1,17 +1,16 @@
 #pragma once
-#define GLEW_STATIC
 
 #include <GL/glew.h>
-#include <GL/gl.h>
-#include "GLRenderer/GLGpuProgram.h"
 
-#pragma comment(lib, "opengl32")
-// #pragma comment(lib, "glu32")
+#include <array>
+#include <cstdint>
+#include <map>
+#include <memory>
 
-#include <FileHelper.h>
-#include <Image.h>
 #include "GLContext.h"
+#include "GLRenderer/GLGpuProgram.h"
 #include "GLRenderer/GLTexture.h"
+#include "GLRenderer/Quad.h"
 #include <Interfaces/IRenderer.h>
 
 namespace OIV
@@ -20,41 +19,51 @@ namespace OIV
     {
       public:
 
-        OIVGLRenderer();
-        // void TestRun();
+        OIVGLRenderer() = default;
+        ~OIVGLRenderer() override;
 
-      private:
-
-        void UpdateGpuParams();
-        void renderOneFrame();
-        void UpdateViewportSize(int x, int y);
-        // bool callback(const OIV::Win32::Event* evnt1);
-        void PrepareResources();
-
-      public:
-
-        // Inherited via IRenderer
         int Init(const OIV_RendererInitializationParams& initParams) override;
         int SetViewParams(const ViewParameters& viewParams) override;
         int Redraw() override;
-        int SetFilterLevel(OIV_Filter_type filtertype) override;
-        int SetImageBuffer(uint32_t id, const IMCodec::ImageSharedPtr image) override;
-        int SetSelectionRect(SelectionRect selectionRect) override;
+        int SetFilterLevel(OIV_Filter_type filterType) override;
+        int SetSelectionRect(VisualSelectionRect selectionRect) override;
         int SetExposure(const OIV_CMD_ColorExposure_Request& exposure) override;
-        int SetImageProperties(const OIV_CMD_ImageProperties_Request&) override;
-        int RemoveImage(uint32_t id) override;
+        int SetBackgroundColor(int index, LLUtils::Color backgroundColor) override;
+        int AddRenderable(IRenderable* renderable) override;
+        int RemoveRenderable(IRenderable* renderable) override;
 
       private:
 
-        bool fIsParamsDirty;
+        struct ImageEntry
+        {
+            IRenderable* renderable{};
+            std::unique_ptr<GLTexture> texture;
+            uint32_t width{};
+            uint32_t height{};
+        };
+
+        void DrawImage(ImageEntry& entry);
+        void PrepareResources();
+        void RenderImages(OIV_Image_Render_mode renderMode);
+        void UpdateGpuParams(const ImageEntry& entry) const;
+        void UpdateViewportSize(int width, int height);
+
+        GLContext fContext;
         GLGpuProgramUniquePtr fProgram;
-        GLTextureUniquePtr fTexture;
-        GLContext context;
-        GLuint vao;
-        GLfloat fUVScale[2];
-        GLfloat fUVffset[2];
-        GLfloat fImageSize[2];
-        GLfloat fViewportSize[2];
-        GLint fShowGrid;
+        std::unique_ptr<Quad> fQuad;
+        std::map<uint32_t, ImageEntry> fImageEntries;
+        GLuint fVertexArray{};
+        std::array<float, 2> fViewportSize{};
+        static constexpr std::array<float, 4> DefaultCanvasColor{45.0F / 255.0F, 45.0F / 255.0F, 48.0F / 255.0F, 1.0F};
+        std::array<std::array<float, 4>, 2> fBackgroundColors{{{0.0F, 0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 0.16F, 1.0F}}};
+        std::array<std::array<float, 4>, 2> fTransparencyColors{
+            {{0.75F, 0.75F, 0.75F, 1.0F}, {1.0F, 1.0F, 1.0F, 1.0F}}};
+        VisualSelectionRect fSelectionRect{};
+        OIV_Filter_type fFilterType{FT_Linear};
+        float fExposure{1.0F};
+        float fOffset{};
+        float fGamma{1.0F};
+        float fSaturation{1.0F};
+        bool fShowGrid{};
     };
 }  // namespace OIV

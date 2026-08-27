@@ -143,6 +143,7 @@ typedef wchar_t OIVCHAR;
     struct OIV_RendererInitializationParams
     {
         size_t container;
+        void* nativeDisplay;
         const OIVCHAR* dataPath;
     };
 
@@ -510,11 +511,11 @@ typedef wchar_t OIVCHAR;
         uint32_t sizeInMemory;
         ImageHandle handle;
     }; */
-    
 
     struct CmdDataInit
     {
         std::size_t parentHandle;
+        void* nativeDisplay;
     };
 
     struct OIV_CMD_QueryImageInfo_Request

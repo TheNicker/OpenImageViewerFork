@@ -13,7 +13,8 @@ namespace OIV
 
         virtual ~IViewerRenderPort() = default;
 
-        virtual void Initialize(std::size_t canvasHandle)                                        = 0;
+        virtual void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr)         = 0;
+        virtual void ResumePresentation()                                                        = 0;
         virtual ResultCode Refresh()                                                             = 0;
         virtual void SetSelectionRect(const LLUtils::RectI32& rect)                              = 0;
         virtual void ClearSelectionRect()                                                        = 0;
@@ -27,9 +28,41 @@ namespace OIV
     {
       public:
 
-        void Initialize(std::size_t canvasHandle) override { OIVCommands::Init(canvasHandle); }
+        enum class PresentationState
+        {
+            Ready,
+            Deferred,
+        };
 
-        ResultCode Refresh() override { return OIVCommands::Refresh(); }
+        explicit OivRenderGateway(PresentationState state = PresentationState::Ready)
+            : fPresentationReady(state == PresentationState::Ready)
+        {
+        }
+
+        void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr) override
+        {
+            OIVCommands::Init(canvasHandle, nativeDisplay);
+        }
+
+        ResultCode Refresh() override
+        {
+            if (!fPresentationReady)
+            {
+                fRefreshPending = true;
+                return RC_Success;
+            }
+            return OIVCommands::Refresh();
+        }
+
+        void ResumePresentation() override
+        {
+            fPresentationReady = true;
+            if (fRefreshPending)
+            {
+                fRefreshPending = false;
+                OIVCommands::Refresh();
+            }
+        }
 
         void SetSelectionRect(const LLUtils::RectI32& rect) override { OIVCommands::SetSelectionRect(rect); }
 
@@ -58,5 +91,10 @@ namespace OIV
             OIV_CMD_RegisterCallbacks_Request request = callbacks;
             return OIVCommands::ExecuteCommand(OIV_CMD_RegisterCallbacks, &request, &OIVCommands::NullCommand);
         }
+
+      private:
+
+        bool fPresentationReady;
+        bool fRefreshPending{};
     };
 }  // namespace OIV

@@ -1,34 +1,41 @@
 #pragma once
-#include <string>
+
 #include <GL/glew.h>
+
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace OIV
 {
-    //static GLSuccees
-    static bool IsShaderCompiled(GLuint shader)
+    inline bool IsShaderCompiled(GLuint shader)
     {
-        GLint result;
+        GLint result{};
         glGetShaderiv(shader, GL_COMPILE_STATUS, &result);
         return result == GL_TRUE;
     }
-    static std::string GetShaderCompileError(GLuint shader)
+
+    inline std::string GetShaderCompileError(GLuint shader)
     {
-        std::unique_ptr<char> buffer;
-        GLint length = -1;
+        GLint length{};
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
-        if (length != -1)
-        {
-            buffer = std::unique_ptr<char>(new char[length]);
-            glGetShaderInfoLog(shader, length, nullptr, buffer.get());
-            return std::string(buffer.get());
-        }
+        if (length <= 1)
+            return {};
 
-        return std::string();
+        std::vector<char> buffer(static_cast<size_t>(length));
+        glGetShaderInfoLog(shader, length, nullptr, buffer.data());
+        return buffer.data();
     }
 
-    static bool GL_SUCCESS(GLuint result)
+    inline std::string GetProgramLinkError(GLuint program)
     {
-        return result != 0;
+        GLint length{};
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+        if (length <= 1)
+            return {};
+
+        std::vector<char> buffer(static_cast<size_t>(length));
+        glGetProgramInfoLog(program, length, nullptr, buffer.data());
+        return buffer.data();
     }
-}
+}  // namespace OIV
