@@ -16,6 +16,8 @@ target_sources(OIViewer PRIVATE
     ExceptionHandler.h
     ImageControl.cpp
     ImageList.cpp
+    LinuxKeyBindings.cpp
+    LinuxKeyBindings.h
     MainWindow.cpp
     MonitorProvider.cpp
     PlatformFileDialog.cpp

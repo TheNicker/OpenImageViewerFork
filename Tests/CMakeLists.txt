@@ -28,6 +28,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(${TargetName} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ContextMenuBackend.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ImageList.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/LinuxKeyBindings.cpp
     )
 endif()
 target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/json/include)
