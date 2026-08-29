@@ -149,6 +149,12 @@ namespace OIV
 
       private:  // types
 
+        static constexpr LWS::WindowStyle WindowChromeStyles = LWS::WindowStyle::Caption |
+                                                               LWS::WindowStyle::CloseButton |
+                                                               LWS::WindowStyle::ResizableBorder |
+                                                               LWS::WindowStyle::MinimizeButton |
+                                                               LWS::WindowStyle::MaximizeButton;
+
         struct CommandRequestIntenal
         {
             std::string commandName;

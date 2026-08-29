@@ -45,6 +45,8 @@ namespace OIV
 
         ImageControl& GetImageControl();
         void SetCursorType(CursorType type);
+        void ShowCanvas();
+        void UpdateLayout();
         void ShowStatusBar(bool show);
         void SetShowImageControl(bool show);
         LWS::Window& GetCanvasWindow();
@@ -64,18 +66,19 @@ namespace OIV
 
         struct NativeState;
 
-        void HandleResize();
         bool HandleWindowEvent(const LWS::AnyEvent& eventData);
         void OnCreate();
         void SetApplicationIcon();
         void UpdateNativeStatusBar(LWS::Size& canvasSize);
+        [[nodiscard]] bool UseMainWindowAsCanvas() const;
 
         LWS::Window fCanvasWindow;
         bool fShowStatusBar           = true;
         bool fShowImageControl        = false;
         CursorType fCurrentCursorType = CursorType::SystemDefault;
         std::array<LWS::Cursor, static_cast<size_t>(CursorType::Count)> fCursors{};
-        bool fCursorsInitialized = false;
+        bool fCursorsInitialized    = false;
+        bool fUseMainWindowAsCanvas = false;
         ImageControl fImageControl;
         std::unique_ptr<NativeState> fNativeState;
     };

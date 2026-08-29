@@ -131,9 +131,8 @@ namespace OIV
     {
         fShowBorders = !fShowBorders;
         {
-            fWindow.SetWindowStyles(LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton |
-                                        LWS::WindowStyle::MinimizeButton,
-                                    fShowBorders);
+            fWindow.SetWindowStyles(WindowChromeStyles, fShowBorders);
+            fWindow.UpdateLayout();
         }
     }
 

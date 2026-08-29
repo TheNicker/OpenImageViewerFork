@@ -32,6 +32,11 @@ namespace OIV
 
     MainWindow::~MainWindow() = default;
 
+    bool MainWindow::UseMainWindowAsCanvas() const
+    {
+        return false;
+    }
+
     void MainWindow::SetApplicationIcon()
     {
         const HICON icon  = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
@@ -73,7 +78,7 @@ namespace OIV
         switch (message.message)
         {
             case WM_SIZE:
-                HandleResize();
+                UpdateLayout();
                 break;
             case WM_DESTROY:
                 PostQuitMessage(0);

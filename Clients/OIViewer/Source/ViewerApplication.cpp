@@ -95,7 +95,10 @@ namespace OIV
         }
 
         // initialize the windowing system of the window
-        const LWS::WindowConfig windowConfig{.size = {1200, 800}};
+        const LWS::WindowConfig windowConfig{
+            .size   = {1200, 800},
+            .styles = WindowChromeStyles,
+        };
         if (fWindow.Create(windowConfig) != LWS::Result::Success)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to create the main window");
         fWindow.SetMenuChar(false);
@@ -110,10 +113,6 @@ namespace OIV
         fWindow.GetCanvasWindow().SetBackgroundColor(LLUtils::Color(45, 45, 48));
 
         fWindow.SetDoubleClickMode(LWS::DoubleClickMode::Default);
-        fWindow.SetWindowStyles(LWS::WindowStyle::ResizableBorder | LWS::WindowStyle::MaximizeButton |
-                                    LWS::WindowStyle::MinimizeButton,
-                                true);
-
         AutoScroll::CreateParams params = {&fWindow,
                                            std::bind(&ViewerApplication::OnScroll, this, std::placeholders::_1)};
         fAutoScroll                     = std::make_unique<AutoScroll>(params);
@@ -173,6 +172,7 @@ namespace OIV
 
         // Update oiv lib client size
         UpdateWindowSize();
+        fWindow.ShowCanvas();
 
         // Wait for initial file to finish loading
         bool isInitialFileLoadedSuccesfuly = false;
@@ -239,8 +239,8 @@ namespace OIV
 
                 const auto& fileList = fBrowseSessionController->GetFolderFileList();
                 bool foundFile       = JumpFiles(1) ||
-                                       (fSlideshowPolicy.ShouldWrap(fileList.GetCurrentIndex(), fileList.GetSize()) &&
-                                        JumpFiles(FolderFileList::IndexStart));
+                                 (fSlideshowPolicy.ShouldWrap(fileList.GetCurrentIndex(), fileList.GetSize()) &&
+                                  JumpFiles(FolderFileList::IndexStart));
 
                 SetSlideShowEnabled(foundFile);
             }));
