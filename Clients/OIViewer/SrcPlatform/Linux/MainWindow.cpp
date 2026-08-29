@@ -27,6 +27,12 @@ namespace OIV
 
     MainWindow::~MainWindow() = default;
 
+    bool MainWindow::UseMainWindowAsCanvas() const
+    {
+        return LWS::Platform::supports(LWS::Platform::Feature::ServerSideDecorations) ||
+               LWS::Platform::supports(LWS::Platform::Feature::HostWindowFrame);
+    }
+
     void MainWindow::SetApplicationIcon() {}
     void MainWindow::UpdateNativeStatusBar([[maybe_unused]] LWS::Size& canvasSize) {}
 
@@ -38,7 +44,7 @@ namespace OIV
     bool MainWindow::HandleWindowEvent(const LWS::AnyEvent& eventData)
     {
         if (std::holds_alternative<LWS::EventResize>(eventData))
-            HandleResize();
+            UpdateLayout();
         else if (std::holds_alternative<LWS::EventWindowDestroyed>(eventData))
             LWS::Platform::requestQuit();
         return false;

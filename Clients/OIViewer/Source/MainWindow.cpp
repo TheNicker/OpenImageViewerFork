@@ -39,14 +39,21 @@ namespace OIV
 
     void MainWindow::OnCreate()
     {
-        if (fCanvasWindow.Create() != LWS::Result::Success)
-            return;
+        fUseMainWindowAsCanvas = UseMainWindowAsCanvas();
+        if (!fUseMainWindowAsCanvas)
+        {
+            const LWS::WindowConfig canvasConfig{
+                .position = {0, 0},
+                .styles   = LWS::WindowStyle::ChildWindow,
+            };
+            fCanvasWindow.SetParent(this);
+            if (fCanvasWindow.Create(canvasConfig) != LWS::Result::Success)
+                return;
 
-        fCanvasWindow.SetParent(this);
-        fCanvasWindow.SetVisible(true);
-        fCanvasWindow.SetTransparent(true);
+            fCanvasWindow.SetTransparent(true);
+        }
         SetApplicationIcon();
-        HandleResize();
+        UpdateLayout();
     }
 
     bool MainWindow::GetShowImageControl() const
@@ -62,7 +69,7 @@ namespace OIV
                 LWS::WindowStyle::NoStyle);
     }
 
-    void MainWindow::HandleResize()
+    void MainWindow::UpdateLayout()
     {
         LWS::Size canvasSize             = GetClientSize();
         constexpr int32_t imageListWidth = 200;
@@ -70,8 +77,11 @@ namespace OIV
             canvasSize.x -= imageListWidth;
 
         UpdateNativeStatusBar(canvasSize);
-        fCanvasWindow.SetPosition({0, 0});
-        fCanvasWindow.SetSize(canvasSize);
+        if (!fUseMainWindowAsCanvas)
+        {
+            fCanvasWindow.SetPosition({0, 0});
+            fCanvasWindow.SetSize(canvasSize);
+        }
 
         if (fImageControl.GetHandle() != 0)
         {
@@ -89,7 +99,7 @@ namespace OIV
         if (show != fShowStatusBar)
         {
             fShowStatusBar = show;
-            HandleResize();
+            UpdateLayout();
         }
     }
 
@@ -101,15 +111,19 @@ namespace OIV
         fShowImageControl = show;
         if (fImageControl.GetHandle() == 0)
         {
-            std::ignore = fImageControl.Create();
+            const LWS::WindowConfig imageControlConfig{
+                .position = {0, 0},
+                .styles   = LWS::WindowStyle::ChildWindow,
+            };
             fImageControl.SetParent(this);
+            std::ignore = fImageControl.Create(imageControlConfig);
         }
-        HandleResize();
+        UpdateLayout();
     }
 
     LWS::Handle MainWindow::GetCanvasHandle() const
     {
-        return fCanvasWindow.GetHandle();
+        return fUseMainWindowAsCanvas ? GetHandle() : fCanvasWindow.GetHandle();
     }
 
     LWS::Handle MainWindow::GetNativeHandle() const
@@ -119,7 +133,7 @@ namespace OIV
 
     LWS::Size MainWindow::GetCanvasSize() const
     {
-        return fCanvasWindow.GetClientSize();
+        return fUseMainWindowAsCanvas ? GetClientSize() : fCanvasWindow.GetClientSize();
     }
 
     ImageControl& MainWindow::GetImageControl()
@@ -129,7 +143,13 @@ namespace OIV
 
     LWS::Window& MainWindow::GetCanvasWindow()
     {
-        return fCanvasWindow;
+        return fUseMainWindowAsCanvas ? static_cast<LWS::Window&>(*this) : fCanvasWindow;
+    }
+
+    void MainWindow::ShowCanvas()
+    {
+        if (!fUseMainWindowAsCanvas)
+            fCanvasWindow.SetVisible(true);
     }
 
     void MainWindow::SetDestoryOnClose(bool destroyOnClose)
