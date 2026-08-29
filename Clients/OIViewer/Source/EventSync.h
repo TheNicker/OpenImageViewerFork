@@ -19,7 +19,7 @@ struct EventData
 using OnMessageCallback = std::function<void(const EventData&)>;
 using EventDataList     = std::vector<EventData>;
 
-// Transitional application-thread dispatch queue. This should move to LWS once LWS exposes task dispatch.
+// Application-thread dispatch queue backed by the active platform wake mechanism.
 class EventSync
 {
   public:

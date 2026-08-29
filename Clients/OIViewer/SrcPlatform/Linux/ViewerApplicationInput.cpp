@@ -1,6 +1,10 @@
 #include "ViewerApplication.h"
 
+#include "ViewerApplicationPlatformState.h"
+
 #include <LLUtils/Exception.h>
+
+#include <OIVAppCore/ConfigurationLoader.h>
 
 namespace OIV
 {
@@ -11,11 +15,29 @@ namespace OIV
         return 0;
     }
 
-    void ViewerApplication::AddPlatformKeyBindings() {}
-
-    bool ViewerApplication::handleKeyInput([[maybe_unused]] const LWS::AnyEvent& eventData)
+    void ViewerApplication::AddPlatformKeyBindings()
     {
-        LL_EXCEPTION_NOT_IMPLEMENT("Native key translation is not implemented on Linux");
+        for (const auto& binding : ConfigurationLoader::LoadKeyBindings())
+            fRawInputState->keyBindings.AddBinding(binding.KeyCombinationName, binding.GroupID);
+    }
+
+    bool ViewerApplication::handleKeyInput(const LWS::AnyEvent& eventData)
+    {
+        const auto* keyEvent = std::get_if<LWS::EventKeyDown>(&eventData);
+        if (keyEvent == nullptr)
+            return false;
+
+        const LinuxKeyModifiers modifiers{
+            .control = LWS::Platform::isKeyPressed(LWS::KeyCode::Control),
+            .shift   = LWS::Platform::isKeyPressed(LWS::KeyCode::Shift),
+            .alt     = LWS::Platform::isKeyPressed(LWS::KeyCode::Alt),
+            .win     = LWS::Platform::isKeyPressed(LWS::KeyCode::Win),
+        };
+        bool handled        = false;
+        const auto commands = fRawInputState->keyBindings.Resolve(keyEvent->key, modifiers);
+        for (const std::string& command : commands)
+            handled = ExecutePredefinedCommand(command) || handled;
+        return handled;
     }
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
@@ -32,6 +54,11 @@ namespace OIV
         {
             fRenderGateway->ResumePresentation();
             handled = true;
+        }
+        else if (std::holds_alternative<LWS::EventKeyDown>(eventData) ||
+                 std::holds_alternative<LWS::EventKeyUp>(eventData))
+        {
+            handled = handleKeyInput(eventData);
         }
         return handled;
     }
