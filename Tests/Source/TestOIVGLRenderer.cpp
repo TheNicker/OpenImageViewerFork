@@ -78,7 +78,7 @@ TEST_CASE("OpenGL renderer factory implements the current renderer contract", "[
 }
 
     #if defined(LWS_PLATFORM_WAYLAND)
-TEST_CASE("OpenGL renderer draws canvas and background checkers", "[renderer][opengl][wayland]")
+TEST_CASE("OpenGL renderer draws canvas, background checkers, and selection", "[renderer][opengl][wayland]")
 {
     LWS::Platform::Session platform;
     if (!platform)
@@ -123,13 +123,25 @@ TEST_CASE("OpenGL renderer draws canvas and background checkers", "[renderer][op
     TestRenderable image(CreateTransparentImage());
     REQUIRE(renderer->AddRenderable(&image) == 0);
     REQUIRE(renderer->Redraw() == 0);
-    const auto backgroundFirst  = ReadPixel(8, 8);
-    const auto backgroundSecond = ReadPixel(24, 8);
+    const auto backgroundFirst         = ReadPixel(8, 8);
+    const auto backgroundSecond        = ReadPixel(24, 8);
+    const auto selectionInteriorBefore = ReadPixel(32, 32);
+    const auto selectionBorderBefore   = ReadPixel(16, 32);
     REQUIRE(glGetError() == GL_NO_ERROR);
     REQUIRE(backgroundFirst[0] > 200);
     REQUIRE(backgroundFirst[2] < 50);
     REQUIRE(backgroundSecond[0] < 50);
     REQUIRE(backgroundSecond[2] > 200);
+
+    REQUIRE(renderer->SetSelectionRect({{16, 16}, {48, 48}}) == 0);
+    REQUIRE(renderer->Redraw() == 0);
+    REQUIRE(ReadPixel(8, 8) != backgroundFirst);
+    REQUIRE(ReadPixel(32, 32) == selectionInteriorBefore);
+    REQUIRE(ReadPixel(16, 32) != selectionBorderBefore);
+
+    REQUIRE(renderer->SetSelectionRect({{-8, 16}, {48, 48}}) == 0);
+    REQUIRE(renderer->Redraw() == 0);
+    REQUIRE(ReadPixel(8, 8) != backgroundFirst);
 
     REQUIRE(renderer->RemoveRenderable(&image) == 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
