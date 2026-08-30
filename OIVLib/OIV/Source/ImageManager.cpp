@@ -45,17 +45,16 @@ namespace OIV
         return ImageHandleNull;
     }
 
-    ImageHandle ImageManager::AddChildImage(const IMCodec::ImageSharedPtr& image,ImageHandle parent)
+    ImageHandle ImageManager::AddChildImage(const IMCodec::ImageSharedPtr& image, ImageHandle parent)
     {
         IMCodec::ImageSharedPtr parentImage = GetImage(parent);
         if (parentImage == nullptr)
-            LL_EXCEPTION(LLUtils::Exception::ErrorCode::DuplicateItem, "Image manager, parent image not found");
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::NotFound, "Image manager, parent image not found");
 
         ImageHandle childHandle = AddImage(image);
         fMapHandleToChildren[parent].push_back(childHandle);
         return childHandle;
     }
-
 
     bool ImageManager::RemoveImage(ImageHandle handle)
     {
