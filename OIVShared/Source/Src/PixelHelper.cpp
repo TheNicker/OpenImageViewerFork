@@ -4,8 +4,10 @@
 
 #include <xxh3.h>
 
+#include <cassert>
 #include <climits>
 #include <cstring>
+#include <type_traits>
 #include <unordered_set>
 
 namespace OIV
@@ -21,6 +23,10 @@ namespace OIV
         bool operator==(const ValueComparer&) const = default;
     };
 #pragma pack(pop)
+
+    template <typename T>
+    concept PackedPixelKey = std::is_trivially_copyable_v<T> && std::is_standard_layout_v<T> &&
+                             std::has_unique_object_representations_v<T> && alignof(T) == 1;
 }
 
 namespace std 
@@ -82,6 +88,8 @@ namespace OIV
     template <typename underlying_type>
     int64_t PixelHelper::GetUniqueColors(const IMCodec::ImageSharedPtr& image, IMCodec::ChannelWidth bpp)
     {
+        static_assert(PackedPixelKey<underlying_type>);
+        assert(static_cast<size_t>(bpp) == sizeof(underlying_type) * CHAR_BIT);
         std::unordered_set<underlying_type> valueSet(image->GetTotalPixels());
 
         const uint8_t* baseAddress = reinterpret_cast<const uint8_t*>(image->GetBuffer());

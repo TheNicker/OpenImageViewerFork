@@ -35,6 +35,7 @@
 #include <OIVShared/AdaptiveMotion.h>
 #include <OIVShared/FileSorter.h>
 #include <OIVShared/ImageResidencyCache.h>
+#include <OIVShared/PixelHelper.h>
 #include <OIVShared/RecursiveDelayOp.h>
 #include <OIVShared/UnitFormatter.h>
 
@@ -46,6 +47,7 @@
 #include <OIVImage/OIVFileImage.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <climits>
@@ -547,6 +549,26 @@ TEST_CASE("ColorCountPolicy ignores stale completions unless image info is visib
 
     REQUIRE(OIV::ColorCountPolicy::NormalizeCountResult(4, -1, -2) == 4);
     REQUIRE(OIV::ColorCountPolicy::NormalizeCountResult(-1, -1, -2) == -2);
+}
+
+TEST_CASE("PixelHelper counts packed multi-byte texels", "[AppCore][Shared]")
+{
+    auto imageItem                                = std::make_shared<IMCodec::ImageItem>();
+    imageItem->itemType                           = IMCodec::ImageItemType::Image;
+    imageItem->descriptor.width                   = 3;
+    imageItem->descriptor.height                  = 1;
+    imageItem->descriptor.rowPitchInBytes         = 9;
+    imageItem->descriptor.texelFormatDecompressed = IMCodec::TexelFormat::I_R8_G8_B8;
+    imageItem->descriptor.texelFormatStorage      = IMCodec::TexelFormat::I_R8_G8_B8;
+    const std::array pixels{
+        std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5},
+        std::byte{6}, std::byte{1}, std::byte{2}, std::byte{3},
+    };
+    imageItem->data.Allocate(pixels.size());
+    imageItem->data.Write(pixels.data(), 0, pixels.size());
+    const auto image = std::make_shared<IMCodec::Image>(imageItem, IMCodec::ImageItemType::Unknown);
+
+    REQUIRE(OIV::PixelHelper::CountUniqueValues(image) == 2);
 }
 
 TEST_CASE("SelectionRect creates, moves, and cancels a selection", "[AppCore]")
