@@ -10,7 +10,7 @@
 	#define GUI_PROVIDER_IMPORT
 #else
 	//  Error, compiler must supoport symbol export.
-	#pragma error Unknown dynamic link import/export semantics.
+	#error Unknown dynamic link import/export semantics.
 #endif
 
 #ifdef GUI_PROVIDER_LIB
