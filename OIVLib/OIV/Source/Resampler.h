@@ -2,10 +2,6 @@
 #include <cstdint>
 #include <vector>
 #include <thread>
-namespace std
-{
-	class thread;
-}
 
 
 namespace OIV
