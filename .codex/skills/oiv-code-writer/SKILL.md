@@ -13,7 +13,7 @@ Use this skill as the repo-local coding standard for OIViewer C++ work.
 2. Inspect nearby code before editing and match local ownership, naming, and layering.
 3. Improve touched code incrementally; avoid broad drive-by rewrites.
 4. Format changed C++ files with the repository `.clang-format`.
-5. For every added or modified feature, add or update focused tests under `Tests`.
+5. Add or update focused tests under `Tests` when changed behavior is not already proven by existing coverage or enforced compile-time contracts.
 6. Do not reduce existing test coverage unless the user explicitly requests it.
 7. Keep line endings consistent with the files being edited and the active repository formatting tools.
 
@@ -41,9 +41,19 @@ Use this skill as the repo-local coding standard for OIViewer C++ work.
 - Keep Win32 code focused on OS events, windows, dialogs, timers, clipboard, input, and platform translation.
 - When touching `Clients/OIViewer`, prefer refactoring Win32-dependent code behind platform boundaries so future non-Windows clients are not blocked.
 
+## Context First
+
+- Before modifying code, read nearby comments, callers, tests, ownership rules, and platform or framework contracts. Preserve the assumptions and supported-use boundaries they establish.
+- Optimize for the actual inputs and use cases in scope rather than every theoretically possible case.
+- Express real compile-time constraints through types, narrow interfaces, and C++ concepts or `requires` in generic code. Do not introduce templates or abstractions solely to encode context for concrete code.
+
 ## C++ Rules
 
-- Prefer minimal, concise, efficient C++26 over long manual implementations when the shorter form remains readable, debuggable, and locally idiomatic.
+- Prefer the simplest direct implementation that satisfies the current request. Introduce a new abstraction or architectural layer only when the user asks for it or a concrete current requirement—such as repeated logic, ownership, or a platform boundary—needs it; do not generalize for hypothetical future use.
+- Write the smallest direct C++26 implementation that satisfies the request. Treat every added branch, check, copy, allocation, conversion, abstraction, and state transition as work that must justify its cost.
+- Keep new public and internal API surface to the minimum required for the requested functionality: use the fewest necessary types, functions, methods, parameters, overloads, callbacks, and configuration options, and keep implementation details private.
+- Prefer one focused, concise interface when it can provide the required functionality. Do not add convenience variants, extensibility points, or generalized hooks for hypothetical callers; preserve existing APIs unless the task explicitly authorizes their removal.
+- Add only code required by current behavior. Remove includes, fields, functions, branches, and other state made unused by the change.
 - Use advanced C++ and STL utilities to remove real boilerplate, duplication, verbose loops, or error-prone branching; do not use clever constructs that hide intent or fight the surrounding style.
 - Prefer structured control flow in ordinary functions. Avoid mid-function `return` for routine branching when `if`/`else`, a result variable, or a scoped branch keeps the code concise and clear.
 - Allow early `return` when it materially improves clarity or safety, such as tiny predicate/accessor functions, unrecoverable precondition paths, avoiding excessive nesting, RAII/resource safety, or complete `switch` case handlers.
@@ -65,11 +75,28 @@ Use this skill as the repo-local coding standard for OIViewer C++ work.
 - Keep `reinterpret_cast` and `const_cast` at platform, ABI, serialization, or graphics API boundaries; avoid them in ordinary app logic.
 - Do not keep redundant helpers. Delete or inline helpers that only forward to another function, wrap a single call without adding policy or validation, preserve an old name after its behavior was removed, have one call site with no abstraction value, or exist only to reduce boilerplate.
 - Do not add production functions solely to satisfy tests or expose internals to tests. Test through behavior-facing APIs unless a helper has clear production value.
-- Avoid repeated non-trivial code patterns. Prefer a local helper function when duplicated blocks perform the same sequence of operations or checks and the helper can be named after the behavior it provides.
+- Before implementing helper or utility logic, search the relevant first-party modules for equivalent functionality. Reuse or appropriately extend an existing helper when its behavior, ownership, layering, and performance fit; do not duplicate the same implementation.
+- When no suitable helper exists, prefer a local helper only when repeated non-trivial blocks perform the same sequence of operations or checks and the helper can be named after the behavior it provides.
+
+## Performance
+
+- Treat runtime performance as a first-class acceptance criterion, not a secondary cleanup concern.
+- Review each change for added runtime work, especially copies, allocations, conversions, synchronization, repeated checks, and work inside per-frame, per-image, per-item, or input-event paths.
+- Do not introduce a known or plausible runtime regression without the user's explicit permission, even when the added work improves correctness, safety, validation, diagnostics, debuggability, testability, readability, or generality.
+- When correctness or safety conflicts with performance, stop before implementing the slower option. Explain the concrete risk, affected path, expected cost, and available zero- or lower-overhead alternatives, then request permission for any remaining regression.
+- Prefer compile-time enforcement, trusted internal contracts, validation at existing external boundaries, cached or amortized work, and other zero-overhead mechanisms over repeated runtime checks. Do not remove existing validation or safety checks unless the requested change authorizes it.
+- When workload context is insufficient to rule out a regression, flag the affected path, suspected cost, and evidence or measurement needed; do not assume the added cost is acceptable.
+
+## Comments and Exceptional Handling
+
+- Document workarounds, non-obvious edge cases, and platform- or framework-specific handling at the narrowest relevant scope.
+- Add missing comments for non-obvious input assumptions, supported-use boundaries, and performance decisions. Explain why the handling is necessary, which environment or external behavior requires it, and the invariant it preserves; include a removal condition when useful.
+- Do not narrate obvious code or retain comments after the exceptional behavior they explain is removed.
 
 ## Testing
 
-- Add or update Catch2 tests in `Tests` for every feature behavior change.
+- Add or update Catch2 tests when behavior changes and existing coverage does not prove it.
+- Omit a test or runtime check only when repository evidence shows an enforced contract makes the case impossible or existing tests already cover it. Document any non-obvious invariant used to justify the omission, and preserve checks at external, trust, indexing, ownership, and ABI boundaries.
 - Prefer tests for app policies, controllers, shared helpers, transforms, sorting, image loading, residency, and formatting behavior.
 - Keep platform-specific behavior thin enough that core decisions can be tested without launching the Win32 viewer.
 - For bug fixes, add a regression test that fails before the fix when practical.
