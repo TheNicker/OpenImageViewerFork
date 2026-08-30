@@ -21,6 +21,44 @@ void main()
 }
 )glsl";
 
+        constexpr char SelectionFragmentShader[] = R"glsl(
+#version 130
+in vec2 coords;
+out vec4 outColor;
+
+uniform vec2 viewportSize;
+uniform vec4 selectionRect;
+
+void main()
+{
+    vec2 p0 = min(selectionRect.xy, selectionRect.zw);
+    vec2 p1 = max(selectionRect.xy, selectionRect.zw);
+    vec2 pixel = coords * viewportSize;
+    if (pixel.x < p0.x || pixel.x > p1.x || pixel.y < p0.y || pixel.y > p1.y)
+    {
+        outColor = vec4(1.0, 1.0, 1.0, 0.8);
+        return;
+    }
+
+    float horizontalDistance = min(pixel.y - p0.y, p1.y - pixel.y);
+    float verticalDistance = min(pixel.x - p0.x, p1.x - pixel.x);
+    float borderDistance = min(horizontalDistance, verticalDistance);
+    if (borderDistance > 1.0)
+    {
+        outColor = vec4(0.0);
+        return;
+    }
+
+    bool horizontalEdge = horizontalDistance <= verticalDistance;
+    float edgeLength = horizontalEdge ? p1.x - p0.x : p1.y - p0.y;
+    float segmentLength = clamp(edgeLength * 0.1, 15.0, 100.0);
+    float edgePosition = horizontalEdge ? pixel.x - p0.x : pixel.y - p0.y;
+    bool firstColor = mod(edgePosition, segmentLength) < segmentLength * 0.5;
+    outColor = firstColor ? vec4(0.0, 120.0 / 255.0, 215.0 / 255.0, 1.0)
+                          : vec4(1.0, 1.0, 0.0, 1.0);
+}
+)glsl";
+
         constexpr char FragmentShader[] = R"glsl(
 #version 130
 in vec2 coords;
@@ -102,14 +140,18 @@ void main()
         glGenVertexArrays(1, &fVertexArray);
         glBindVertexArray(fVertexArray);
 
-        fProgram = std::make_unique<GLGpuProgram>(VertexShader, FragmentShader);
-        fQuad    = std::make_unique<Quad>();
+        fProgram          = std::make_unique<GLGpuProgram>(VertexShader, FragmentShader);
+        fSelectionProgram = std::make_unique<GLGpuProgram>(VertexShader, SelectionFragmentShader);
+        fQuad             = std::make_unique<Quad>();
 
-        fProgram->Bind();
         fQuad->Bind();
-        const GLint positionAttribute = glGetAttribLocation(fProgram->GetProgram(), "position");
-        glVertexAttribPointer(positionAttribute, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-        glEnableVertexAttribArray(positionAttribute);
+        for (const GLGpuProgram* program : {fProgram.get(), fSelectionProgram.get()})
+        {
+            const GLint positionAttribute = glGetAttribLocation(program->GetProgram(), "position");
+            glVertexAttribPointer(positionAttribute, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+            glEnableVertexAttribArray(positionAttribute);
+        }
+        fProgram->Bind();
         fProgram->SetUniform1I("imageTexture", 0);
 
         glEnable(GL_BLEND);
@@ -145,6 +187,7 @@ void main()
         glClearColor(DefaultCanvasColor[0], DefaultCanvasColor[1], DefaultCanvasColor[2], DefaultCanvasColor[3]);
         glClear(GL_COLOR_BUFFER_BIT);
         RenderImages(IRM_MainImage);
+        DrawSelectionRect();
         RenderImages(IRM_Overlay);
         fContext.SwapBuffers();
         return 0;
@@ -239,6 +282,23 @@ void main()
         entry.texture->SetFilter(filter == FT_None ? GL_NEAREST : GL_LINEAR);
         entry.texture->Bind();
         UpdateGpuParams(entry);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
+
+    void OIVGLRenderer::DrawSelectionRect() const
+    {
+        if (fSelectionRect.p0.x == -1)
+            return;
+
+        const std::array<float, 4> selectionRect{
+            static_cast<float>(fSelectionRect.p0.x),
+            static_cast<float>(fSelectionRect.p0.y),
+            static_cast<float>(fSelectionRect.p1.x),
+            static_cast<float>(fSelectionRect.p1.y),
+        };
+        fSelectionProgram->Bind();
+        fSelectionProgram->SetUniform2F("viewportSize", fViewportSize[0], fViewportSize[1]);
+        fSelectionProgram->SetUniform4F("selectionRect", selectionRect.data());
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
 

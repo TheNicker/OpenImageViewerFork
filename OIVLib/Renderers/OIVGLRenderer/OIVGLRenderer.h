@@ -43,6 +43,7 @@ namespace OIV
         };
 
         void DrawImage(ImageEntry& entry);
+        void DrawSelectionRect() const;
         void PrepareResources();
         void RenderImages(OIV_Image_Render_mode renderMode);
         void UpdateGpuParams(const ImageEntry& entry) const;
@@ -50,6 +51,7 @@ namespace OIV
 
         GLContext fContext;
         GLGpuProgramUniquePtr fProgram;
+        GLGpuProgramUniquePtr fSelectionProgram;
         std::unique_ptr<Quad> fQuad;
         std::map<uint32_t, ImageEntry> fImageEntries;
         GLuint fVertexArray{};
@@ -58,7 +60,7 @@ namespace OIV
         std::array<std::array<float, 4>, 2> fBackgroundColors{{{0.0F, 0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, 0.16F, 1.0F}}};
         std::array<std::array<float, 4>, 2> fTransparencyColors{
             {{0.75F, 0.75F, 0.75F, 1.0F}, {1.0F, 1.0F, 1.0F, 1.0F}}};
-        VisualSelectionRect fSelectionRect{};
+        VisualSelectionRect fSelectionRect{{-1, -1}, {-1, -1}};
         OIV_Filter_type fFilterType{FT_Linear};
         float fExposure{1.0F};
         float fOffset{};
