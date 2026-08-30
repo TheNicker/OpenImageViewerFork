@@ -58,6 +58,7 @@
 #include <OIVShared/PixelHelper.h>
 #include <ImageUtil/ImageUtil.h>
 #include "InterThreadMessages.h"
+#include "ViewerMouseInput.h"
 
 namespace OIV
 {
@@ -228,6 +229,7 @@ namespace OIV
 
     {
         InitializePlatformState();
+        fMouseInput = std::make_unique<ViewerMouseInput>(*this);
         fCommandController.SetResultSink([this](const LLUtils::native_string_type& message)
                                          { SetUserMessage(message); });
 

@@ -34,4 +34,9 @@ namespace OIV::detail
     {
         return fNativeState->visible;
     }
+
+    bool ContextMenuBackend::IsSupported() const
+    {
+        return false;
+    }
 }  // namespace OIV::detail

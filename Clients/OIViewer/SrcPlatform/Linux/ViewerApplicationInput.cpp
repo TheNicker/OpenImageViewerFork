@@ -1,6 +1,7 @@
 #include "ViewerApplication.h"
 
 #include "ViewerApplicationPlatformState.h"
+#include "ViewerMouseInput.h"
 
 #include <LLUtils/Exception.h>
 
@@ -12,7 +13,7 @@ namespace OIV
 
     int ViewerApplication::GetRawNavigationDirection() const
     {
-        return 0;
+        return fMouseInput->GetNavigationDirection();
     }
 
     void ViewerApplication::AddPlatformKeyBindings()
@@ -42,6 +43,24 @@ namespace OIV
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
+        constexpr uint8_t PointerDeviceId = 0;
+        if (const auto* button = std::get_if<LWS::EventMouseButton>(&eventData))
+        {
+            fMouseInput->SetButton(PointerDeviceId, button->button, button->pressed, true);
+            return 1;
+        }
+        if (const auto* motion = std::get_if<LWS::EventMouseMove>(&eventData))
+        {
+            fMouseInput->Move(PointerDeviceId, motion->delta);
+            UpdateTexelPos();
+            return 1;
+        }
+        if (const auto* wheel = std::get_if<LWS::EventMouseWheel>(&eventData))
+        {
+            fMouseInput->Wheel(wheel->steps());
+            return 1;
+        }
+
         bool handled = false;
         if (std::holds_alternative<LWS::EventResize>(eventData))
         {
@@ -68,14 +87,15 @@ namespace OIV
         if (std::holds_alternative<LWS::EventKeyDown>(eventData) || std::holds_alternative<LWS::EventKeyUp>(eventData))
             return handleKeyInput(eventData);
 
-        if (std::holds_alternative<LWS::EventMouseMove>(eventData))
-            UpdateTexelPos();
-        else if (std::holds_alternative<LWS::EventClose>(eventData))
+        if (std::holds_alternative<LWS::EventClose>(eventData))
             CloseApplication(false);
         else if (std::holds_alternative<LWS::EventFocusGained>(eventData))
             SetAppActive(true);
         else if (std::holds_alternative<LWS::EventFocusLost>(eventData))
+        {
+            fMouseInput->Cancel();
             SetAppActive(false);
+        }
         else if (std::holds_alternative<LWS::EventPaint>(eventData) && !fIsFirstFrameDisplayed)
         {
             fIsFirstFrameDisplayed = true;

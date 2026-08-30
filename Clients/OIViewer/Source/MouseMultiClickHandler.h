@@ -28,10 +28,8 @@ SOFTWARE.
 #include <set>
 #include <LLUtils/StopWatch.h>
 #include <LLUtils/Event.h>
-#include <LInput/Buttons/ButtonState.h>
-#include <LInput/Buttons/IButtonStateExtension.h>
 #include <LWS/Timer.hpp>
-#include <LInput/Mouse/MouseButton.h>
+#include <LWS/MouseButton.hpp>
 
 namespace OIV
 {
@@ -42,7 +40,7 @@ namespace OIV
 
         struct EventArgs
         {
-            LInput::MouseButton button;
+            LWS::MouseButton button;
             uint16_t clickCount;
         };
 
@@ -59,23 +57,23 @@ namespace OIV
             uint16_t tapCounter              = 0;
             int16_t posX;
             int16_t posY;
-            LInput::ButtonState buttonState = LInput::ButtonState::Up;
+            bool pressed = false;
         };
 
       public:
 
         // Get the state of a button whether it's down or up
-        void SetButtonState(LInput::MouseButton button, LInput::ButtonState newState);
+        void SetButtonState(LWS::MouseButton button, bool pressed);
         void SetMouseDelta(int16_t deltaX, int16_t deltaY);
+        void Reset();
 
       private:
 
-        ButtonData& GetButtonData(LInput::MouseButton buttonId);
+        ButtonData& GetButtonData(LWS::MouseButton buttonId);
         void ProcessQueuedButtons();
         void ResetPosition();
         void TimerCallback();
-        void RemoveButton(LInput::MouseButton button);
-        void StartTimer();
+        void RemoveButton(LWS::MouseButton button);
 
       private:
 
@@ -92,12 +90,12 @@ namespace OIV
         int16_t fMaxMultiClickRadius = 10;
         LWS::HighPrecisionTimer fTimer{std::bind(&MouseMultiClickHandler::TimerCallback, this)};
 
-        std::array<ButtonData, 8> fButtonsData{};
+        std::array<ButtonData, static_cast<size_t>(LWS::MouseButton::Count)> fButtonsData{};
 
         /// <summary>
         /// used for sending key repeaet signals to the client
         /// </summary>
-        std::set<LInput::MouseButton> fPressedButtons;
+        std::set<LWS::MouseButton> fPressedButtons;
         LLUtils::StopWatch fStopWatch = LLUtils::StopWatch(true);
     };
 }  // namespace OIV

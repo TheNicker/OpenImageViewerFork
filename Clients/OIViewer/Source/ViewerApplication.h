@@ -61,6 +61,7 @@
 #include <vector>
 namespace OIV
 {
+    class ViewerMouseInput;
     enum class ImageSizeType
     {
         Original,
@@ -148,6 +149,8 @@ namespace OIV
         static LWS::Handle FindTrayBarWindow();
 
       private:  // types
+
+        friend class ViewerMouseInput;
 
         static constexpr LWS::WindowStyle WindowChromeStyles = LWS::WindowStyle::Caption |
                                                                LWS::WindowStyle::CloseButton |
@@ -466,7 +469,7 @@ namespace OIV
         };
 
         std::unique_ptr<ContextMenu<MenuItemData>> fContextMenu;
-        LLUtils::PointI32 fDownPosition;
+        std::unique_ptr<ViewerMouseInput> fMouseInput;
         LWS::Timer fContextMenuTimer;
         LWS::Timer fSequencerTimer;
         FileSorter fFileSorter;

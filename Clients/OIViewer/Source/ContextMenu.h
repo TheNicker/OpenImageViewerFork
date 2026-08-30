@@ -43,6 +43,7 @@ namespace OIV
             void EnableItem(uint32_t itemId, bool enabled);
             void AddItem(uint32_t itemId, const LLUtils::native_string_type& name);
             [[nodiscard]] bool IsVisible() const;
+            [[nodiscard]] bool IsSupported() const;
 
           private:
 
@@ -94,6 +95,7 @@ namespace OIV
         }
 
         [[nodiscard]] bool IsVisible() const { return fBackend.IsVisible(); }
+        [[nodiscard]] bool IsSupported() const { return fBackend.IsSupported(); }
 
       private:
 

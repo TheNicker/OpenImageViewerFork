@@ -1,7 +1,6 @@
 #pragma once
 
-#include <LInput/Buttons/ButtonStates.h>
-#include <LInput/Mouse/MouseButton.h>
+#include <LWS/MouseButton.hpp>
 
 #include <array>
 #include <cstddef>
@@ -12,19 +11,20 @@ namespace OIV
     {
       public:
 
-        void Update(LInput::MouseButton button, LInput::ButtonState state, bool mouseUnderWindow)
+        void Update(LWS::MouseButton button, bool pressed, bool mouseUnderWindow)
         {
             const size_t index = static_cast<size_t>(button);
-            if (state == LInput::ButtonState::Down && mouseUnderWindow)
+            if (pressed && mouseUnderWindow)
                 fCapturedButtons[index] = true;
-            else if (state == LInput::ButtonState::Up)
+            else if (!pressed)
                 fCapturedButtons[index] = false;
         }
 
-        bool IsCaptured(LInput::MouseButton button) const { return fCapturedButtons.at(static_cast<size_t>(button)); }
+        bool IsCaptured(LWS::MouseButton button) const { return fCapturedButtons.at(static_cast<size_t>(button)); }
+        void Reset() { fCapturedButtons.fill(false); }
 
       private:
 
-        std::array<bool, static_cast<size_t>(LInput::MouseButton::Count)> fCapturedButtons{};
+        std::array<bool, static_cast<size_t>(LWS::MouseButton::Count)> fCapturedButtons{};
     };
 }  // namespace OIV
