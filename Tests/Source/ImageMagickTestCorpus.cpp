@@ -814,6 +814,8 @@ namespace OIV::Tests
                     std::filesystem::create_directories(outPath.parent_path());
                     if (kind == "complexBaseImage")
                         GenerateComplexBaseImage(magick, outPath, variables);
+                    else if (kind == "binaryHex")
+                        WriteBinaryFile(outPath, DecodeHexString(RequireString(source, "hex")));
                     else
                         FAIL("Unsupported ImageMagick corpus source kind: " << kind);
                 }
