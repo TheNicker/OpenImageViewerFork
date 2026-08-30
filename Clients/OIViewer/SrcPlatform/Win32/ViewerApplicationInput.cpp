@@ -3,6 +3,7 @@
 #include "Globals.h"
 #include "UserMessages.h"
 #include "ViewerApplicationPlatformState.h"
+#include "ViewerMouseInput.h"
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LWS/Win32/EventWin32.hpp>
@@ -30,247 +31,27 @@ namespace OIV
         }
     }  // namespace
 
-    void ViewerApplication::RawInputState::OnMouseEvent(
-        const LInput::ButtonStdExtension<MouseButtonType>::ButtonEvent& buttonEvent)
-    {
-        using namespace LInput;
-        const bool mouseInside = owner.fWindow.IsUnderMouseCursor() && owner.fWindow.IsMouseCursorInClientRect();
-        if (buttonEvent.button == MouseButton::Middle && buttonEvent.eventType == EventType::Pressed && mouseInside)
-        {
-            owner.fAutoScroll->ToggleAutoScroll();
-            if (!owner.fAutoScroll->IsAutoScrolling())
-            {
-                owner.fWindow.SetCursorType(MainWindow::CursorType::SystemDefault);
-                owner.fAutoScrollAnchor.reset();
-            }
-            else
-            {
-                const LLUtils::native_string_type anchorPath = LLUtils::StringUtility::ToNativeString(
-                                                                   LLUtils::PlatformUtility::GetExeFolder()) +
-                                                               LLUTILS_TEXT("./Resources/Cursors/ArrowC.cur");
-                auto fileImage                               = std::make_unique<OIVFileImage>(anchorPath);
-                if (fileImage->Load(&owner.fImageLoader, IMCodec::PluginTraverseMode::AnyPlugin) == RC_Success)
-                {
-                    fileImage->SetImageRenderMode(OIV_Image_Render_mode::IRM_Overlay);
-                    fileImage->SetPosition(static_cast<LLUtils::PointF64>(
-                        static_cast<LLUtils::PointI32>(owner.fWindow.GetMousePosition()) -
-                        static_cast<LLUtils::PointI32>(fileImage->GetImage()->GetDimensions()) / 2));
-                    fileImage->SetScale({1.0, 1.0});
-                    fileImage->SetOpacity(0.5);
-                    fileImage->SetVisible(true);
-                    owner.fAutoScrollAnchor = std::move(fileImage);
-                }
-            }
-        }
-
-        if (buttonEvent.button == MouseButton::Left && buttonEvent.eventType == EventType::Released)
-            owner.fWindow.SetLockMouseToWindowMode(LWS::LockMouseToWindowMode::NoLock);
-
-        LWS::LockMouseToWindowMode lockMode = LWS::LockMouseToWindowMode::NoLock;
-        const auto mouseStateIt             = mouseDevicesState.find(buttonEvent.parent->GetID());
-        if (mouseStateIt == mouseDevicesState.end())
-            return;
-
-        const auto& mouseState   = mouseStateIt->second;
-        const bool leftDown      = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        const bool rightDown     = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-        const bool rightCaptured = mouseCaptureState.IsCaptured(MouseButtonType::Right);
-
-        if (buttonEvent.button == MouseButton::Left)
-        {
-            if (buttonEvent.eventType == EventType::Pressed && rightDown && mouseInside)
-            {
-                owner.fRockerGestureActivate = true;
-                owner.fContextMenuTimer.SetInterval(0);
-                owner.JumpFiles(-1);
-            }
-            else if (!rightDown && !rightCaptured && !LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) &&
-                     !owner.fWindow.IsFullScreen())
-            {
-                lockMode = LWS::Platform::isKeyPressed(LWS::KeyCode::Control) ? LWS::LockMouseToWindowMode::LockResize
-                                                                              : LWS::LockMouseToWindowMode::LockMove;
-            }
-
-            if (buttonEvent.eventType == EventType::Released)
-                lockMode = LWS::LockMouseToWindowMode::NoLock;
-            owner.fWindow.SetLockMouseToWindowMode(lockMode);
-
-            if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
-            {
-                SelectionRect::Operation operation = SelectionRect::Operation::NoOp;
-                if (buttonEvent.eventType == EventType::Pressed && owner.fWindow.IsUnderMouseCursor())
-                    operation = SelectionRect::Operation::BeginDrag;
-                else if (buttonEvent.eventType == EventType::Released && owner.fWindow.IsUnderMouseCursor())
-                    operation = SelectionRect::Operation::EndDrag;
-                owner.fSelectionRect.SetSelection(operation,
-                                                  owner.SnapToScreenSpaceImagePixels(owner.fWindow.GetMousePosition()));
-                owner.SaveImageSpaceSelection();
-            }
-        }
-
-        if (buttonEvent.button == MouseButton::Back || buttonEvent.button == MouseButton::Forward)
-        {
-            if (buttonEvent.eventType == EventType::Pressed && owner.fWindow.IsUnderMouseCursor())
-            {
-                owner.fTimerNavigation.SetInterval(owner.fQuickBrowseDelay);
-            }
-            else if (!mouseCaptureState.IsCaptured(MouseButton::Back) &&
-                     !mouseCaptureState.IsCaptured(MouseButton::Forward))
-            {
-                owner.fTimerNavigation.SetInterval(0);
-            }
-        }
-
-        if (buttonEvent.button == MouseButton::Right && buttonEvent.eventType == EventType::Pressed && mouseInside)
-        {
-            if (leftDown)
-            {
-                owner.fRockerGestureActivate = true;
-                owner.fContextMenuTimer.SetInterval(0);
-                owner.JumpFiles(1);
-            }
-
-            if (owner.fContextMenuTimer.GetInterval() == 0 && !owner.fRockerGestureActivate)
-            {
-                owner.fContextMenuTimer.SetInterval(500);
-                owner.fDownPosition = LWS::Platform::getMousePosition();
-            }
-        }
-    }
-
-    void ViewerApplication::RawInputState::OnMouseInput(const LInput::RawInput::RawInputEventMouse& mouseInput)
-    {
-        using namespace LInput;
-        const auto mouseStateIt = mouseDevicesState.find(mouseInput.deviceIndex);
-        if (mouseStateIt == mouseDevicesState.end())
-            return;
-
-        const auto& mouseState      = mouseStateIt->second;
-        const bool leftDown         = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        const bool rightDown        = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-        const bool rightCaptured    = mouseCaptureState.IsCaptured(MouseButtonType::Right);
-        const bool leftCaptured     = mouseCaptureState.IsCaptured(MouseButtonType::Left);
-        const bool mouseUnderWindow = owner.fWindow.IsUnderMouseCursor();
-
-        if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) && leftCaptured)
-        {
-            owner.fSelectionRect.SetSelection(SelectionRect::Operation::Drag,
-                                              owner.SnapToScreenSpaceImagePixels(owner.fWindow.GetMousePosition()));
-            owner.SaveImageSpaceSelection();
-        }
-
-        if (rightCaptured && !owner.fContextMenu->IsVisible() && (mouseInput.deltaX != 0 || mouseInput.deltaY != 0))
-            owner.Pan(LLUtils::PointF64(mouseInput.deltaX, mouseInput.deltaY));
-
-        const int32_t wheelDelta = mouseInput.wheelDelta;
-        if (wheelDelta != 0)
-        {
-            if (mouseUnderWindow && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
-                owner.ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousSubImage" : "NextSubImage");
-            else if (mouseUnderWindow && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
-                owner.ExecutePredefinedCommand(wheelDelta > 0 ? "PreviousImageInFolder" : "NextImageInFolder");
-            else if (rightCaptured || mouseUnderWindow)
-            {
-                const auto mousePosition = owner.fWindow.GetMousePosition();
-                if (rightCaptured)
-                    owner.Zoom(wheelDelta * 0.2);
-                else
-                    owner.Zoom(wheelDelta * 0.2, mousePosition.x, mousePosition.y);
-            }
-        }
-
-        if (rightDown)
-        {
-            const LLUtils::PointI32 currentPosition = LWS::Platform::getMousePosition();
-            if (currentPosition.DistanceSquared(owner.fDownPosition) > 25)
-                owner.fContextMenuTimer.SetInterval(0);
-        }
-        else
-        {
-            owner.fContextMenuTimer.SetInterval(0);
-        }
-
-        if (!leftDown && !rightDown)
-            owner.fRockerGestureActivate = false;
-    }
-
     void ViewerApplication::RawInputState::OnRawInput(const LInput::RawInput::RawInputEvent& event)
     {
         using namespace LInput;
         if (event.deviceType != RawInput::RawInputDeviceType::Mouse)
             return;
 
-        const auto& mouseEvent = static_cast<const RawInput::RawInputEventMouse&>(event);
-        auto mouseStateIt      = mouseDevicesState.find(event.deviceIndex);
-        if (mouseStateIt == mouseDevicesState.end())
+        const auto& mouse = static_cast<const RawInput::RawInputEventMouse&>(event);
+        constexpr std::array buttons{LWS::MouseButton::Left, LWS::MouseButton::Right, LWS::MouseButton::Middle,
+                                     LWS::MouseButton::X1, LWS::MouseButton::X2};
+        auto& canvas           = owner.fWindow.GetCanvasWindow();
+        const bool mouseInside = canvas.IsMouseInClientRect();
+        for (size_t index = 0; index < buttons.size(); ++index)
         {
-            mouseStateIt   = mouseDevicesState.emplace(event.deviceIndex, MouseButtonState{}).first;
-            auto extension = std::make_shared<ButtonStdExtension<MouseButtonType>>(event.deviceIndex, 250, 0);
-            extension->OnButtonEvent.Add(
-                [this](const auto& buttonEvent)
-                {
-                    owner.HandleEventCallback(
-                        [&]()
-                        {
-                            OnMouseEvent(buttonEvent);
-                            return true;
-                        });
-                });
-            mouseStateIt->second.AddExtension(
-                std::static_pointer_cast<IButtonStateExtension<MouseButtonType>>(extension));
+            if (mouse.buttonState[index] != ButtonState::NotSet)
+                owner.fMouseInput->SetButton(event.deviceIndex, buttons[index],
+                                             mouse.buttonState[index] == ButtonState::Down, mouseInside);
         }
-
-        for (size_t index = 0; index < RawInput::MaxMouseButtons; ++index)
-        {
-            const auto button = static_cast<MouseButton>(index);
-            mouseStateIt->second.SetButtonState(button, mouseEvent.buttonState[index]);
-            const bool mouseUnderWindow = mouseEvent.buttonState[index] == ButtonState::Down &&
-                                          owner.fWindow.IsUnderMouseCursor();
-            mouseCaptureState.Update(button, mouseEvent.buttonState[index], mouseUnderWindow);
-            mouseClickEventHandler.SetButtonState(button, mouseEvent.buttonState[index]);
-        }
-
-        mouseClickEventHandler.SetMouseDelta(mouseEvent.deltaX, mouseEvent.deltaY);
-        OnMouseInput(mouseEvent);
+        owner.fMouseInput->Move(event.deviceIndex, {mouse.deltaX, mouse.deltaY});
+        if (mouse.wheelDelta != 0)
+            owner.fMouseInput->Wheel(mouse.wheelDelta);
     }
-
-    void ViewerApplication::RawInputState::OnMouseMultiClick(const MouseMultiClickHandler::EventArgs& event)
-    {
-        using namespace LInput;
-        if (event.clickCount != 2 || !owner.fWindow.IsMouseCursorInClientRect() ||
-            !owner.fWindow.IsUnderMouseCursor() || mouseDevicesState.empty())
-            return;
-
-        const auto& mouseState = mouseDevicesState.begin()->second;
-        const bool rightDown   = mouseState.GetButtonState(MouseButtonType::Right) == ButtonState::Down;
-        const bool leftDown    = mouseState.GetButtonState(MouseButtonType::Left) == ButtonState::Down;
-        if (event.button == MouseButton::Left && !rightDown)
-        {
-            if (owner.fSelectionRect.GetOperation() != SelectionRect::Operation::NoOp)
-                owner.CancelSelection();
-            else
-                owner.ToggleFullScreen(LWS::Platform::isKeyPressed(LWS::KeyCode::Alt));
-        }
-        else if (event.button == MouseButton::Right && !leftDown)
-        {
-            owner.ExecutePredefinedCommand("PasteImageFromClipboard");
-        }
-    }
-
-    int ViewerApplication::RawInputState::GetNavigationDirection() const
-    {
-        using namespace LInput;
-        if (mouseDevicesState.empty())
-            return 0;
-
-        const auto& state = mouseDevicesState.begin()->second;
-        if (state.GetButtonState(MouseButton::Forward) == ButtonState::Down)
-            return 1;
-        if (state.GetButtonState(MouseButton::Back) == ButtonState::Down)
-            return -1;
-        return 0;
-    }
-
     void ViewerApplication::InitializeRawInput()
     {
         using namespace LInput;
@@ -288,21 +69,11 @@ namespace OIV
                     });
             });
         fRawInputState->rawInput.Enable(true);
-        fRawInputState->mouseClickEventHandler.OnMouseClickEvent.Add(
-            [this](const MouseMultiClickHandler::EventArgs& event)
-            {
-                HandleEventCallback(
-                    [&]()
-                    {
-                        fRawInputState->OnMouseMultiClick(event);
-                        return true;
-                    });
-            });
     }
 
     int ViewerApplication::GetRawNavigationDirection() const
     {
-        return fRawInputState->GetNavigationDirection();
+        return fMouseInput->GetNavigationDirection();
     }
 
     void ViewerApplication::AddPlatformKeyBindings()
@@ -403,8 +174,13 @@ namespace OIV
                 CloseApplication(false);
                 break;
             case WM_ACTIVATE:
-                SetAppActive(message->wParam != WA_INACTIVE);
+            {
+                const bool active = LOWORD(message->wParam) != WA_INACTIVE;
+                if (!active)
+                    fMouseInput->Cancel();
+                SetAppActive(active);
                 break;
+            }
             default:
                 break;
         }

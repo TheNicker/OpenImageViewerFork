@@ -1,6 +1,7 @@
 #include "ViewerApplication.h"
 
 #include "ViewerApplicationPlatformState.h"
+#include "ViewerMouseInput.h"
 
 #include <LLUtils/Logging/Logger.h>
 #include <LLUtils/PlatformUtility.h>
