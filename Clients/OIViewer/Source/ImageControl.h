@@ -5,6 +5,7 @@
 #include <LWS/Window.hpp>
 
 #include <cstdint>
+#include <memory>
 
 namespace OIV
 {
@@ -22,8 +23,15 @@ namespace OIV
 
       private:
 
+        struct NativeState;
+
         bool HandleWindowEvent(const LWS::AnyEvent& eventData);
+        void InitializeEvents();
+        void InitializePlatformRendering();
+        void RequestRepaint();
+        void UpdateScrollPosition();
 
         ImageList fImageList;
+        std::unique_ptr<NativeState> fNativeState;
     };
 }  // namespace OIV

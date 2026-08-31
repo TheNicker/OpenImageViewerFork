@@ -61,6 +61,30 @@
 
 namespace OIV
 {
+    void ViewerApplication::AddImageToControl(IMCodec::ImageSharedPtr image, uint16_t imageSlot, uint16_t totalImages)
+    {
+        auto bitmapImage = IMUtil::ImageUtil::ConvertImageWithNormalization(image, IMCodec::TexelFormat::I_B8_G8_R8_A8,
+                                                                            false);
+        if (bitmapImage == nullptr)
+            return;
+
+        const LWS::BitmapBuffer bitmapBuffer{
+            .pixels   = {bitmapImage->GetBuffer(),
+                         static_cast<size_t>(bitmapImage->GetRowPitchInBytes()) * bitmapImage->GetHeight()},
+            .format   = LWS::BitmapPixelFormat::Bgra8,
+            .rowOrder = LWS::BitmapRowOrder::TopDown,
+            .width    = bitmapImage->GetWidth(),
+            .height   = bitmapImage->GetHeight(),
+            .rowPitch = bitmapImage->GetRowPitchInBytes(),
+        };
+
+        LLUtils::native_stringstream title;
+        title << imageSlot + 1 << LLUTILS_TEXT('/') << totalImages << LLUTILS_TEXT("  ") << bitmapBuffer.width
+              << LLUTILS_TEXT(" x ") << bitmapBuffer.height << LLUTILS_TEXT(" x 32 BPP");
+        fWindow.GetImageControl().GetImageList().SetImage(
+            {.index = imageSlot, .title = title.str(), .bitmap = std::make_shared<LWS::Bitmap>(bitmapBuffer)});
+    }
+
     void ViewerApplication::UnloadOpenedImaged()
     {
         if (fBrowseSessionController != nullptr)

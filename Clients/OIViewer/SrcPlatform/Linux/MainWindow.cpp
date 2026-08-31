@@ -56,6 +56,4 @@ namespace OIV
     {
         LL_EXCEPTION_NOT_IMPLEMENT("Tray-window properties are not implemented on Linux");
     }
-
-    void MainWindow::SetMenuChar([[maybe_unused]] bool suppress) {}
 }  // namespace OIV
