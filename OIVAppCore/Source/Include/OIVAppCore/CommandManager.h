@@ -42,16 +42,15 @@ namespace OIV
         {
             static CommandArgs FromString(const std::string& str)
             {
-                using namespace LLUtils;
-                using namespace std;
                 CommandArgs args;
-                ListAString props = StringUtility::split(str, ';');
+                const LLUtils::ListAString props = LLUtils::StringUtility::split(str, ';');
                 args.args.reserve(props.size());
 
                 for (const std::string& pair : props)
                 {
-                    ListAString keyval = StringUtility::split(pair, '=');
-                    args.args.push_back({keyval[0], keyval[1]});
+                    const std::size_t separator = pair.find('=');
+                    if (separator != std::string::npos)
+                        args.args.push_back({pair.substr(0, separator), pair.substr(separator + 1)});
                 }
                 return args;
             }
