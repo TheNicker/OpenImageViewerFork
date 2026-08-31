@@ -2,9 +2,6 @@
 
 #include "Resource.h"
 
-#include <LWS/Win32/EventWin32.hpp>
-#include <LWS/Win32/WindowBackendWin32.hpp>
-
 #include <Windows.h>
 
 namespace OIV
@@ -69,27 +66,8 @@ namespace OIV
 
     bool MainWindow::HandleWindowEvent(const LWS::AnyEvent& eventData)
     {
-        const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
-        if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
-            raw->platformData == nullptr)
-            return false;
-
-        const auto& message = *reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
-        switch (message.message)
-        {
-            case WM_SIZE:
-                UpdateLayout();
-                break;
-            case WM_DESTROY:
-                PostQuitMessage(0);
-                break;
-            case WM_ACTIVATE:
-                if (message.wParam != WA_INACTIVE)
-                    SetIsTrayWindow(false);
-                break;
-            default:
-                break;
-        }
+        if (std::holds_alternative<LWS::EventResize>(eventData))
+            UpdateLayout();
         return false;
     }
 
@@ -102,11 +80,5 @@ namespace OIV
     bool MainWindow::GetIsTrayWindow(LWS::Handle windowHandle)
     {
         return GetProp(reinterpret_cast<HWND>(windowHandle), LLUTILS_TEXT("isTrayWindow")) != nullptr;
-    }
-
-    void MainWindow::SetMenuChar(bool suppress)
-    {
-        if (auto* backend = getBackendAs<LWS::WindowBackendWin32>())
-            backend->setMenuChar(suppress);
     }
 }  // namespace OIV

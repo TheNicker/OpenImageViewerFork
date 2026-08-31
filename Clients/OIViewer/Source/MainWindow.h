@@ -53,7 +53,6 @@ namespace OIV
         void SetStatusBarText(LLUtils::native_string_type message, int part, int type);
         void SetIsTrayWindow(bool isTrayWindow);
         static bool GetIsTrayWindow(LWS::Handle windowHandle);
-        void SetMenuChar(bool suppress);
         void SetDestoryOnClose(bool destroyOnClose);
         void SetForground();
         void SetPosition(int32_t x, int32_t y);

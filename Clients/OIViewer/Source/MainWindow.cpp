@@ -78,19 +78,13 @@ namespace OIV
 
         UpdateNativeStatusBar(canvasSize);
         if (!fUseMainWindowAsCanvas)
-        {
-            fCanvasWindow.SetPosition({0, 0});
-            fCanvasWindow.SetSize(canvasSize);
-        }
+            fCanvasWindow.SetPlacement({.position = {0, 0}, .size = canvasSize});
 
         if (fImageControl.GetHandle() != 0)
         {
-            fImageControl.SetVisible(fShowImageControl);
             if (fShowImageControl)
-            {
-                fImageControl.SetPosition({canvasSize.x, 0});
-                fImageControl.SetSize({imageListWidth, canvasSize.y});
-            }
+                fImageControl.SetPlacement({.position = {canvasSize.x, 0}, .size = {imageListWidth, canvasSize.y}});
+            fImageControl.SetVisible(fShowImageControl);
         }
     }
 
@@ -112,8 +106,9 @@ namespace OIV
         if (fImageControl.GetHandle() == 0)
         {
             const LWS::WindowConfig imageControlConfig{
-                .position = {0, 0},
-                .styles   = LWS::WindowStyle::ChildWindow,
+                .position        = {0, 0},
+                .styles          = LWS::WindowStyle::ChildWindow,
+                .eraseBackground = fImageControl.GetBackendId() != LWS::BackendId::Wayland,
             };
             fImageControl.SetParent(this);
             std::ignore = fImageControl.Create(imageControlConfig);

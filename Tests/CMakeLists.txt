@@ -21,13 +21,11 @@ target_sources(${TargetName} PRIVATE
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_sources(${TargetName} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Win32/ContextMenuBackend.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Win32/ImageList.cpp
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_definitions(${TargetName} PRIVATE OIV_TEST_PLATFORM_LINUX)
     target_sources(${TargetName} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ContextMenuBackend.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ImageList.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/LinuxKeyBindings.cpp
     )
 endif()

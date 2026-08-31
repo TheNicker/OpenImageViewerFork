@@ -1,6 +1,6 @@
 #include "ExceptionHandler.h"
 #include "Main.h"
-#include "UserMessages.h"
+#include "CopyDataProtocol.h"
 #include "ViewerApplication.h"
 
 #include <LLUtils/Exception.h>
@@ -29,11 +29,10 @@ namespace
     void ForwardFileToExistingInstance(LWS::Handle targetWindow, const LLUtils::native_string_type& filePath)
     {
         COPYDATASTRUCT copyData{};
-        copyData.dwData = OIV::Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY;
+        copyData.dwData = OIV::Win32::LoadFileCopyDataId;
         copyData.cbData = static_cast<DWORD>((filePath.length() + 1) * sizeof(LLUtils::native_char_type));
         copyData.lpData = const_cast<LLUtils::native_char_type*>(filePath.c_str());
-        SendMessage(reinterpret_cast<HWND>(targetWindow), WM_COPYDATA,
-                    OIV::Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY, reinterpret_cast<LPARAM>(&copyData));
+        SendMessage(reinterpret_cast<HWND>(targetWindow), WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&copyData));
     }
 
     int PlatformMain(int argc, const wchar_t* const* argv)

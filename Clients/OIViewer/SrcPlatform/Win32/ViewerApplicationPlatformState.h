@@ -6,8 +6,11 @@
 #include <LInput/Win32/RawInput/RawInput.h>
 
 #include <LWS/NotificationIconGroup.hpp>
+#include <LWS/Win32/EventWin32.hpp>
 
 #include <Windows.h>
+
+#include <optional>
 
 namespace OIV
 {
@@ -23,6 +26,8 @@ namespace OIV
         explicit RawInputState(ViewerApplication& application) : owner(application) {}
 
         void OnRawInput(const LInput::RawInput::RawInputEvent& event);
+        void HandleKeyInput(const LWS::Win32::KeyEvent& event);
+        std::optional<LRESULT> HandlePlatformEvent(const LWS::Win32::PlatformEvent& event);
 
         ViewerApplication& owner;
         LInput::RawInput rawInput;

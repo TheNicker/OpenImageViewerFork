@@ -4,6 +4,7 @@ target_sources(OIViewer PRIVATE
     ApplicationLog.cpp
     ClipboardSetup.cpp
     ContextMenuBackend.cpp
+    CopyDataProtocol.h
     EntryPoint.cpp
     EventSync.cpp
     ExceptionHandler.cpp
@@ -12,13 +13,11 @@ target_sources(OIViewer PRIVATE
     Helpers/PhotoshopFinder.h
     Helpers/ShellCommandHandler.cpp
     ImageControl.cpp
-    ImageList.cpp
     MainWindow.cpp
     MonitorProvider.cpp
     PlatformFileDialog.cpp
     OIViewerManifest.xml
     Resource.h
-    UserMessages.h
     ViewerApplication.cpp
     ViewerApplicationImage.cpp
     ViewerApplicationInput.cpp

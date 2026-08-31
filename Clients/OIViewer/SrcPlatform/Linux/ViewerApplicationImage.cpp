@@ -91,13 +91,6 @@ namespace OIV
         }
     }
 
-    void ViewerApplication::AddImageToControl([[maybe_unused]] IMCodec::ImageSharedPtr image,
-                                              [[maybe_unused]] uint16_t imageSlot,
-                                              [[maybe_unused]] uint16_t totalImages)
-    {
-        LL_EXCEPTION_NOT_IMPLEMENT("Native subimage presentation is not implemented on Linux");
-    }
-
     ClipboardDataType ViewerApplication::PasteFromClipBoard()
     {
         if (gtk_init_check(nullptr, nullptr) == FALSE)

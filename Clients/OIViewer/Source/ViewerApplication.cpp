@@ -101,7 +101,9 @@ namespace OIV
         };
         if (fWindow.Create(windowConfig) != LWS::Result::Success)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to create the main window");
-        fWindow.SetMenuChar(false);
+#ifdef LWS_PLATFORM_WIN32
+        std::ignore = LWS::Win32::SetMenuChar(fWindow, false);
+#endif
         fWindow.ShowStatusBar(false);
         fWindow.SetDestoryOnClose(false);
         if (LWS::Platform::supports(LWS::Platform::Feature::DragAndDrop) &&

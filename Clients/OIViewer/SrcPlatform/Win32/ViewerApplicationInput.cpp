@@ -1,7 +1,7 @@
 #include "ViewerApplication.h"
 
 #include "Globals.h"
-#include "UserMessages.h"
+#include "CopyDataProtocol.h"
 #include "ViewerApplicationPlatformState.h"
 #include "ViewerMouseInput.h"
 
@@ -19,18 +19,6 @@
 
 namespace OIV
 {
-    namespace
-    {
-        const LWS::Win32::WinMessage* GetWinMessage(const LWS::AnyEvent& eventData)
-        {
-            const auto* raw = std::get_if<LWS::EventRawPlatform>(&eventData);
-            if (raw == nullptr || raw->platformType != std::to_underlying(LWS::BackendId::Win32) ||
-                raw->platformData == nullptr)
-                return nullptr;
-            return reinterpret_cast<const LWS::Win32::WinMessage*>(raw->platformData);
-        }
-    }  // namespace
-
     void ViewerApplication::RawInputState::OnRawInput(const LInput::RawInput::RawInputEvent& event)
     {
         using namespace LInput;
@@ -55,6 +43,18 @@ namespace OIV
     void ViewerApplication::InitializeRawInput()
     {
         using namespace LInput;
+        std::ignore = LWS::Win32::SetPlatformCallback(fWindow,
+                                                      [this](const LWS::Win32::PlatformEvent& event)
+                                                      {
+                                                          std::optional<LRESULT> result;
+                                                          HandleEventCallback(
+                                                              [&]()
+                                                              {
+                                                                  result = fRawInputState->HandlePlatformEvent(event);
+                                                                  return false;
+                                                              });
+                                                          return result;
+                                                      });
         fRawInputState->rawInput.AddDevice(RawInput::UsagePage::GenericDesktopControls,
                                            RawInput::GenericDesktopControlsUsagePage::Mouse,
                                            RawInput::Flags::EnableBackground);
@@ -85,28 +85,24 @@ namespace OIV
         }
     }
 
-    bool ViewerApplication::handleKeyInput(const LWS::AnyEvent& eventData)
+    void ViewerApplication::RawInputState::HandleKeyInput(const LWS::Win32::KeyEvent& eventData)
     {
-        const auto* message = GetWinMessage(eventData);
-        if (message == nullptr)
-            return false;
+        if (!eventData.pressed)
+            return;
 
-        const LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
-            static_cast<uint32_t>(message->wParam), static_cast<uint32_t>(message->lParam));
+        const LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(eventData.virtualKey,
+                                                                                             eventData.keyData);
         LInput::KeyBindings<RawInputState::BindingElement>::ConcreteBindingType bindings;
-        bool result = true;
-        if (fRawInputState->keyBindings.GetBinding(keyCombination, bindings))
+        if (keyBindings.GetBinding(keyCombination, bindings))
         {
             for (const auto& binding : bindings)
-                result |= ExecutePredefinedCommand(binding.commandDescription);
+                owner.ExecutePredefinedCommand(binding.commandDescription);
         }
-        return result;
     }
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
-        const auto* message = GetWinMessage(eventData);
-        if (message != nullptr && message->message == WM_SIZE)
+        if (std::holds_alternative<LWS::EventResize>(eventData))
         {
             fRefreshOperation.Begin();
             UpdateWindowSize();
@@ -115,76 +111,59 @@ namespace OIV
         return 0;
     }
 
-    bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
+    std::optional<LRESULT> ViewerApplication::RawInputState::HandlePlatformEvent(
+        const LWS::Win32::PlatformEvent& eventData)
     {
-        const auto* message = GetWinMessage(eventData);
-        if (message == nullptr)
-            return false;
-
-        bool handled = false;
-        switch (message->message)
+        if (const auto* key = std::get_if<LWS::Win32::KeyEvent>(&eventData))
         {
-            case WM_SHOWWINDOW:
-                if (!fIsFirstFrameDisplayed && message->wParam == TRUE)
-                {
-                    PostMessage(reinterpret_cast<HWND>(fWindow.GetHandle()),
-                                Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED, 0, 0);
-                    fIsFirstFrameDisplayed = true;
-                }
-                break;
-            case Win32::UserMessage::PRIVATE_WN_FIRST_FRAME_DISPLAYED:
-                AfterFirstFrameDisplayed();
-                break;
-            case Win32::UserMessage::PRIVATE_WN_AUTO_SCROLL:
-                fAutoScroll->PerformAutoScroll();
-                break;
-            case Win32::UserMessage::PRIVATE_WM_NOTIFY_FILE_CHANGED:
-                OnFileChangedImpl(reinterpret_cast<IFileWatcher::FileChangedEventArgs*>(message->wParam));
-                break;
-            case WM_COPYDATA:
+            if (!key->pressed)
             {
-                const auto* copyData = reinterpret_cast<const COPYDATASTRUCT*>(message->lParam);
-                if (message->wParam == Win32::UserMessage::PRIVATE_WM_LOAD_FILE_EXTERNALLY && copyData != nullptr)
-                {
-                    const auto* fileToLoad = reinterpret_cast<const wchar_t*>(copyData->lpData);
-                    LoadFile(fileToLoad, IMCodec::PluginTraverseMode::NoTraverse);
-                    fWindow.SetVisible(true);
-                }
-                break;
-            }
-            case WM_SYSKEYUP:
-            case WM_KEYUP:
-            {
-                LInput::KeyCombination keyCombination = LInput::KeyCombination::FromVirtualKey(
-                    static_cast<uint32_t>(message->wParam), static_cast<uint32_t>(message->lParam));
-                const auto keyCode = keyCombination.keydata().keycode;
+                const auto keyCode =
+                    LInput::KeyCombination::FromVirtualKey(key->virtualKey, key->keyData).keydata().keycode;
                 if (keyCode == LInput::KeyCode::LALT || keyCode == LInput::KeyCode::RIGHTALT ||
                     keyCode == LInput::KeyCode::RALT)
-                    fDoubleTap.SetState(false);
-                break;
+                    owner.fDoubleTap.SetState(false);
             }
-            case WM_KEYDOWN:
-            case WM_SYSKEYDOWN:
-                handled = handleKeyInput(eventData);
-                break;
-            case WM_MOUSEMOVE:
-                UpdateTexelPos();
-                break;
-            case WM_CLOSE:
-                CloseApplication(false);
-                break;
-            case WM_ACTIVATE:
-            {
-                const bool active = LOWORD(message->wParam) != WA_INACTIVE;
-                if (!active)
-                    fMouseInput->Cancel();
-                SetAppActive(active);
-                break;
-            }
-            default:
-                break;
+            HandleKeyInput(*key);
+            return std::nullopt;
         }
-        return handled;
+        if (const auto* activation = std::get_if<LWS::Win32::ActivationEvent>(&eventData))
+        {
+            if (!activation->active)
+                owner.fMouseInput->Cancel();
+            else
+                owner.fWindow.SetIsTrayWindow(false);
+            owner.SetAppActive(activation->active);
+            return std::nullopt;
+        }
+        if (const auto* copyData = std::get_if<LWS::Win32::CopyDataEvent>(&eventData);
+            copyData != nullptr && copyData->identifier == Win32::LoadFileCopyDataId &&
+            copyData->data.size() >= sizeof(wchar_t) && copyData->data.size() % sizeof(wchar_t) == 0)
+        {
+            const auto* fileToLoad      = reinterpret_cast<const wchar_t*>(copyData->data.data());
+            const size_t characterCount = copyData->data.size() / sizeof(wchar_t);
+            if (fileToLoad[characterCount - 1] == L'\0')
+            {
+                owner.LoadFile(fileToLoad, IMCodec::PluginTraverseMode::NoTraverse);
+                owner.fWindow.SetVisible(true);
+                return TRUE;
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
+    {
+        if (std::holds_alternative<LWS::EventMouseMove>(eventData))
+            UpdateTexelPos();
+        else if (std::holds_alternative<LWS::EventClose>(eventData))
+            CloseApplication(false);
+        else if (std::holds_alternative<LWS::EventPaint>(eventData) && !fIsFirstFrameDisplayed)
+        {
+            fIsFirstFrameDisplayed = true;
+            AfterFirstFrameDisplayed();
+        }
+        return false;
     }
 
     void ViewerApplication::CloseApplication(bool closeToTray)
@@ -212,10 +191,8 @@ namespace OIV
 
     bool ViewerApplication::HandleMessages(const LWS::AnyEvent& eventData)
     {
-        if (GetWinMessage(eventData) != nullptr)
-            return HandleWinMessageEvent(eventData);
         if (const auto* dragDropEvent = std::get_if<LWS::EventDragDropFile>(&eventData))
             return HandleFileDragDropEvent(*dragDropEvent);
-        return false;
+        return HandleWinMessageEvent(eventData);
     }
 }  // namespace OIV
