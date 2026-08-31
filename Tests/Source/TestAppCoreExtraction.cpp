@@ -372,6 +372,17 @@ TEST_CASE("ViewCommandPolicy parses view command arguments", "[AppCore]")
     REQUIRE(OIV::ViewCommandPolicy::FormatPlacementResult("Center") == LLUTILS_TEXT("<textcolor=#00ff00>Center"));
 }
 
+TEST_CASE("CommandArgs ignores malformed properties", "[AppCore]")
+{
+    const auto args = OIV::CommandManager::CommandArgs::FromString("valid=1;malformed;empty=;expression=a=b");
+
+    REQUIRE(args.args.size() == 3);
+    REQUIRE(args.GetArgValue("valid") == "1");
+    REQUIRE(args.GetArgValue("malformed").empty());
+    REQUIRE(args.GetArgValue("empty").empty());
+    REQUIRE(args.GetArgValue("expression") == "a=b");
+}
+
 TEST_CASE("ViewCommandPolicy parses navigation and window size decisions", "[AppCore]")
 {
     auto navigation = OIV::ViewCommandPolicy::ParseNavigation(
