@@ -176,11 +176,24 @@ namespace OIV
         return true;
     }
 
-    void ViewerApplication::HandleReloadAction(ReloadAction action,
-                                               [[maybe_unused]] const LLUtils::native_string_type& requestedFile)
+    void ViewerApplication::HandleReloadAction(ReloadAction action, const LLUtils::native_string_type& requestedFile)
     {
         if (action == ReloadAction::AskUser)
-            LL_EXCEPTION_NOT_IMPLEMENT("Native reload confirmation is not implemented on Linux");
+        {
+            if (gtk_init_check(nullptr, nullptr) == FALSE)
+            {
+                action = fFileReloadPolicy.ConfirmReload(false);
+            }
+            else
+            {
+                GtkWidget* dialog  = gtk_message_dialog_new(nullptr, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION,
+                                                            GTK_BUTTONS_YES_NO, "Reload the file: %s?",
+                                                            requestedFile.c_str());
+                const int response = gtk_dialog_run(GTK_DIALOG(dialog));
+                gtk_widget_destroy(dialog);
+                action = fFileReloadPolicy.ConfirmReload(response == GTK_RESPONSE_YES);
+            }
+        }
         if (action == ReloadAction::RequestNow && fBrowseSessionController != nullptr)
             fBrowseSessionController->RequestCurrentFileReload();
     }
