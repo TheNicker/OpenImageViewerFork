@@ -159,23 +159,7 @@ namespace OIV
 
             if (!text.empty())
             {
-                auto textImage = std::make_shared<OIVTextImage>(ImageSource::ClipboardText, fFreeType.get());
-                textImage->SetText(text);
-                textImage->SetPosition(LLUtils::PointF64::Zero);
-                textImage->SetScale(LLUtils::PointF64::One);
-                textImage->SetFilterType(OIV_Filter_type::FT_None);
-                textImage->SetImageRenderMode(OIV_Image_Render_mode::IRM_MainImage);
-                textImage->SetVisible(true);
-                textImage->SetOpacity(1.0);
-                textImage->SetDPI(fCurrentMonitorProperties.dpiX, fCurrentMonitorProperties.dpiY);
-                textImage->SetFontPath(LabelManager::sFontPath);
-                textImage->SetFontSize(10);
-                textImage->SetOutlineWidth(0);
-                textImage->SetTextColor({48, 48, 48, 255});
-                textImage->SetUseMetaText(false);
-                textImage->SetBackgroundColor(LLUtils::Color(255, 255, 255, 255));
-                textImage->Create();
-                LoadOivImage(textImage);
+                LoadClipboardText(text);
                 clipboardType = ClipboardDataType::Text;
             }
         }

@@ -275,6 +275,7 @@ namespace OIV
         void LoadRaw(const std::byte* buffer, uint32_t width, uint32_t height, uint32_t rowPitch,
                      IMCodec::TexelFormat texelFormat);
         ClipboardDataType PasteFromClipBoard();
+        void LoadClipboardText(const LLUtils::native_string_type& text);
         bool SetClipboardImage(IMCodec::ImageSharedPtr image);
         OperationResult CropVisibleImage();
         OperationResult CopyVisibleToClipBoard();
