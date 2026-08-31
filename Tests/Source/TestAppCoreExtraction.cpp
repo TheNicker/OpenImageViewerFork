@@ -490,8 +490,13 @@ TEST_CASE("SubImagePolicy maps visible sub-images and selections", "[AppCore]")
 TEST_CASE("FrameLimiterPolicy decides refresh timing", "[AppCore]")
 {
     REQUIRE(OIV::FrameLimiterPolicy::FrameWindowMicroseconds(60'000) == 16'666);
+    REQUIRE(OIV::FrameLimiterPolicy::FrameWindowMicroseconds(0) == 0);
+    REQUIRE(OIV::FrameLimiterPolicy::FrameWindowMicroseconds(-1) == 0);
 
     auto decision = OIV::FrameLimiterPolicy::Decide(false, false, 0, 60'000);
+    REQUIRE(decision.action == OIV::FrameRefreshAction::RefreshNow);
+
+    decision = OIV::FrameLimiterPolicy::Decide(true, false, 0, 0);
     REQUIRE(decision.action == OIV::FrameRefreshAction::RefreshNow);
 
     decision = OIV::FrameLimiterPolicy::Decide(true, false, 20'000, 60'000);
