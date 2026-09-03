@@ -14,6 +14,7 @@ param (
     [bool]$CleanConfigureOnMismatch = $true,
     [switch]$CleanConfigure,
     [switch]$EchoCommands,
+    [hashtable]$CMakeDefinitions = @{},
     [string]$CMakePath,
     [string]$NinjaPath,
     [string]$SevenZipPath,
@@ -785,6 +786,9 @@ function New-CMakeConfigureSpec {
     $platformDefines = @($Context.Profile.ConfigureToolDefines | ForEach-Object {
         New-CMakeDefine -Name $_.Name -Value $Context.Tools[$_.ToolKey] -IsPath $true
     })
+    $customDefines = @($Context.CMakeDefinitions.GetEnumerator() | ForEach-Object {
+        New-CMakeDefine -Name $_.Key -Value "$($_.Value)"
+    })
     $defines = @(
         New-CMakeDefine -Name "CMAKE_BUILD_TYPE"                -Value $Context.BuildType
         New-CMakeDefine -Name "CMAKE_MAKE_PROGRAM"              -Value $Context.Tools["Ninja"]              -IsPath $true
@@ -792,7 +796,7 @@ function New-CMakeConfigureSpec {
         New-CMakeDefine -Name "OIV_OFFICIAL_RELEASE"            -Value "$($Context.OfficialRelease)"
         New-CMakeDefine -Name "OIV_VERSION_REVISION"            -Value "$($Context.VersionRevision)"
         New-CMakeDefine -Name "OIV_RELEASE_SUFFIX"              -Value "$($Context.ReleaseSuffix)"
-    ) + $platformDefines
+    ) + $platformDefines + $customDefines
 
     $configureArgs = @("-S", $Context.RootDir, "-B", $Context.BuildDir, "-G", $Context.Generator) +
         @($defines | ForEach-Object { "-D$($_.Name)=$($_.Value)" })
@@ -1022,6 +1026,7 @@ function New-PublishContext {
         CleanConfigure           = $Options.CleanConfigure
         CleanConfigureOnMismatch = $Options.CleanConfigureOnMismatch
         EchoCommands             = $Options.EchoCommands
+        CMakeDefinitions         = $Options.CMakeDefinitions
         Generator                = "Ninja"
         Profile                  = $Profile
         Tools                    = $ToolInfo.Paths
@@ -1225,6 +1230,7 @@ function Run-OIVBuild {
         CleanConfigure           = [bool]$CleanConfigure
         CleanConfigureOnMismatch = $CleanConfigureOnMismatch
         EchoCommands             = [bool]$EchoCommands
+        CMakeDefinitions         = $CMakeDefinitions
         CMakePath                = $CMakePath
         NinjaPath                = $NinjaPath
         SevenZipPath             = $SevenZipPath
