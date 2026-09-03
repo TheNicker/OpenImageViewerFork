@@ -74,7 +74,7 @@ jobs:
 
       - name: Build release binaries
         shell: pwsh
-        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE)) -EnablePackage $false
+        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE)) -EnablePackage $false -CMakeDefinitions @{ lerc = "OFF" }
 
       - name: Bundle Linux libstdc++ runtime
         if: matrix.platform == 'Linux'
