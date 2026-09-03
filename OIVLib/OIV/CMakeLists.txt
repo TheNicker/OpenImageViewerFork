@@ -32,6 +32,9 @@ target_include_directories(${TargetName}
 
 
 option(FREETYPE_WRAPPER_BUILD_SAMPLES "freetype build samples" OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(FREETYPE_WRAPPER_BUILD_FRIBIDI OFF CACHE BOOL "Build FriBidi" FORCE)
+endif()
 
 add_subdirectory(${ExternalFolder}/FreeTypeWrapper/ ./external/FreeTypeWrapper)
 

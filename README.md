@@ -85,13 +85,15 @@ The viewer executable and copied resources are generated under the build tree's 
 
 ## Packaging
 
-For a release-style Windows package, run:
+For a release-style package, run:
 
 ```powershell
 .\publish.ps1
 ```
 
 The publish script uses Ninja internally and requires 7-Zip when packaging is enabled.
+On Linux, invoke it as `pwsh ./publish.ps1`. The script verifies that `7z` is available before
+configuring and produces a Linux `.7z` runtime package after building OIViewer.
 
 ## Tests
 

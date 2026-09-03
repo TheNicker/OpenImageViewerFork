@@ -26,6 +26,11 @@ param (
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+enum PublishPlatform {
+    Windows
+    Linux
+}
+
 #---------------------------------------------------------------
 # Common Helpers
 #---------------------------------------------------------------
@@ -158,13 +163,18 @@ function Invoke-NativeCommand {
     }
 }
 
-function Test-IsWindowsPlatform {
+function Get-PublishPlatform {
     $isWindowsVariable = Get-Variable -Name IsWindows -Scope Global -ErrorAction SilentlyContinue
-    if ($isWindowsVariable) {
-        return [bool]$isWindowsVariable.Value
+    if (($isWindowsVariable -and $isWindowsVariable.Value) -or $env:OS -eq "Windows_NT") {
+        return [PublishPlatform]::Windows
     }
 
-    $env:OS -eq "Windows_NT"
+    $isLinuxVariable = Get-Variable -Name IsLinux -Scope Global -ErrorAction SilentlyContinue
+    if ($isLinuxVariable -and $isLinuxVariable.Value) {
+        return [PublishPlatform]::Linux
+    }
+
+    Raise-Error "Unsupported publish platform: $([System.Runtime.InteropServices.RuntimeInformation]::OSDescription)"
 }
 
 #---------------------------------------------------------------
@@ -186,16 +196,16 @@ function Get-ExistingToolPath {
 function Find-CommandPath {
     param(
         [string[]]$CommandNames,
-        [string]$PathValue = $env:Path
+        [string]$PathValue = $env:PATH
     )
 
     if (-not $PathValue) {
         return $null
     }
 
-    $previousPath = $env:Path
+    $previousPath = $env:PATH
     try {
-        $env:Path = $PathValue
+        $env:PATH = $PathValue
         foreach ($commandName in $CommandNames) {
             $command = Get-Command $commandName -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($command) {
@@ -203,7 +213,7 @@ function Find-CommandPath {
             }
         }
     } finally {
-        $env:Path = $previousPath
+        $env:PATH = $previousPath
     }
 
     return $null
@@ -381,7 +391,7 @@ function Add-ToolDirectoriesToPath {
     param([string[]]$ToolPaths)
 
     $pathSeparator = [System.IO.Path]::PathSeparator
-    $pathDirs = $env:Path -split [regex]::Escape($pathSeparator) |
+    $pathDirs = $env:PATH -split [regex]::Escape($pathSeparator) |
         Where-Object { $_ } |
         ForEach-Object { (Convert-ToForwardSlash $_.Trim()).TrimEnd('/') }
 
@@ -390,7 +400,7 @@ function Add-ToolDirectoriesToPath {
 
         $toolDir = (Convert-ToForwardSlash (Split-Path -Path $toolPath -Parent)).TrimEnd('/')
         if ($toolDir -and -not ($pathDirs -contains $toolDir)) {
-            $env:Path += "$pathSeparator$toolDir"
+            $env:PATH += "$pathSeparator$toolDir"
             $pathDirs += $toolDir
         }
     }
@@ -445,10 +455,10 @@ function New-ToolSpec {
 function New-PlatformProfile {
     param(
         [object]$Options,
-        [bool]$WindowsPlatform
+        [PublishPlatform]$Platform
     )
 
-    if ($WindowsPlatform) {
+    if ($Platform -eq [PublishPlatform]::Windows) {
         $needsWindowsBuildTools = $Options.EnableConfigure -or $Options.EnableBuild
         $baseLlvmToolDirs = @("${env:ProgramFiles}/LLVM/bin", "${env:ProgramFiles(x86)}/LLVM/bin")
         $cmakeFallbacks = @(
@@ -470,7 +480,7 @@ function New-PlatformProfile {
         $mtFallbacks = @($baseLlvmToolDirs | ForEach-Object { "$_/llvm-mt.exe" }) + @(Get-WindowsSdkToolPaths "mt.exe")
 
         return [PSCustomObject]@{
-            Name               = "Windows"
+            Platform           = [PublishPlatform]::Windows
             NeedsVsEnvironment = $needsWindowsBuildTools
             ToolSpecs          = @(
                 New-ToolSpec -Key "CMake"    -Name "CMake"             -Commands @("cmake.exe", "cmake")          -Fallbacks $cmakeFallbacks     -OverridePath $Options.CMakePath    -Required ($Options.EnableConfigure -or $Options.EnableBuild) -VsDiscoverable $true
@@ -502,18 +512,25 @@ function New-PlatformProfile {
         }
     }
 
-    # Linux profile — package support not yet implemented.
     [PSCustomObject]@{
-        Name               = "Linux"
+        Platform           = [PublishPlatform]::Linux
         NeedsVsEnvironment = $false
         ToolSpecs          = @(
-            New-ToolSpec -Key "CMake"  -Name "CMake"  -Commands @("cmake")  -Fallbacks @() -OverridePath $Options.CMakePath  -Required ($Options.EnableConfigure -or $Options.EnableBuild) -VsDiscoverable $false
-            New-ToolSpec -Key "Ninja"  -Name "Ninja"  -Commands @("ninja")  -Fallbacks @() -OverridePath $Options.NinjaPath  -Required $Options.EnableConfigure                            -VsDiscoverable $false
-            New-ToolSpec -Key "Git"    -Name "Git"    -Commands @("git")    -Fallbacks @() -OverridePath $Options.GitPath    -Required $true                                               -VsDiscoverable $false
+            New-ToolSpec -Key "CMake"    -Name "CMake"  -Commands @("cmake") -Fallbacks @() -OverridePath $Options.CMakePath    -Required ($Options.EnableConfigure -or $Options.EnableBuild) -VsDiscoverable $false
+            New-ToolSpec -Key "Ninja"    -Name "Ninja"  -Commands @("ninja") -Fallbacks @() -OverridePath $Options.NinjaPath    -Required $Options.EnableConfigure                            -VsDiscoverable $false
+            New-ToolSpec -Key "Git"      -Name "Git"    -Commands @("git")   -Fallbacks @() -OverridePath $Options.GitPath      -Required $true                                               -VsDiscoverable $false
+            New-ToolSpec -Key "SevenZip" -Name "7-Zip"  -Commands @("7z")    -Fallbacks @() -OverridePath $Options.SevenZipPath -Required $true                                               -VsDiscoverable $false
         )
         ConfigureToolDefines = @()
         EnvironmentTools     = @()
-        PackageSpec          = $null
+        PackageSpec          = [PSCustomObject]@{
+            RuntimePatterns  = @("OIViewer", "*.so*", "Resources")
+            RequiredFiles    = @("OIViewer", "Resources")
+            SymbolPatterns   = @()
+            ArchiveExtension = ".7z"
+            ArchiveToolKey   = "SevenZip"
+            ArchiveArgs      = @("a", "-mx9", "-snl")
+        }
     }
 }
 
@@ -532,7 +549,7 @@ function Resolve-BuildTools {
 
     # VS discovery runs when required tools are missing or SDK rc.exe needs INCLUDE from VsDevCmd.
     # Standalone LLVM tools and an existing developer environment do not need this fallback.
-    if ($Profile.Name -eq "Windows" -and ($missingVsDiscoverableTools.Count -gt 0 -or $needsVsEnvironment)) {
+    if ($Profile.Platform -eq [PublishPlatform]::Windows -and ($missingVsDiscoverableTools.Count -gt 0 -or $needsVsEnvironment)) {
         $vsWherePath = Resolve-ToolPath -Name "vswhere" -CommandNames @("vswhere.exe") `
             -FallbackPaths @("${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe") `
             -PreferredPath $InitialPath -OverridePath $null -Required $true
@@ -954,7 +971,7 @@ function Get-PackageBuildInfo {
 function Format-PackageNameSuffix {
     param([object]$BuildInfo)
 
-    "$($BuildInfo.TargetSystem)$($BuildInfo.Platform)$($BuildInfo.Toolchain)"
+    @($BuildInfo.TargetSystem, $BuildInfo.Platform, $BuildInfo.Toolchain) -join "-"
 }
 
 function Write-PackageBuildInfo {
@@ -983,7 +1000,6 @@ function New-PublishContext {
     param(
         [object]$Options,
         [object]$ToolInfo,
-        [bool]$WindowsPlatform,
         [object]$Profile
     )
 
@@ -1007,7 +1023,6 @@ function New-PublishContext {
         CleanConfigureOnMismatch = $Options.CleanConfigureOnMismatch
         EchoCommands             = $Options.EchoCommands
         Generator                = "Ninja"
-        WindowsPlatform          = $WindowsPlatform
         Profile                  = $Profile
         Tools                    = $ToolInfo.Paths
         ToolDisplay              = $ToolInfo.Display
@@ -1060,6 +1075,7 @@ function Write-BuildInfo {
 
     Write-Host "Build Info"
     Write-Host "-----------------------------------------------"
+    Write-Host ("Platform      : {0}" -f $Context.Profile.Platform)
     Write-Host ("Root Dir      : {0}" -f $Context.RootDir)
     Write-Host ("Build Dir     : {0}" -f $Context.BuildDir)
     Write-Host ("Bin Dir       : {0}" -f $Context.BinDir)
@@ -1162,7 +1178,7 @@ function Invoke-Package {
 
     $packageSpec = $Context.Profile.PackageSpec
     if ($null -eq $packageSpec) {
-        Raise-Error "Packaging is not implemented for the $($Context.Profile.Name) platform."
+        Raise-Error "Packaging is not implemented for the $($Context.Profile.Platform) platform."
     }
 
     Write-Host "Packaging..."
@@ -1186,9 +1202,10 @@ function Invoke-Package {
     Assert-PackageInputs $requiredRuntimeInputs "runtime"
     # Pre-flight wildcard check: ensures archive inputs are never silently empty.
     Assert-PackageInputs $runtimePackageInputs "runtime"
-    Assert-PackageInputs $symbolsPackageInputs "symbols"
-
-    New-Archive $Context "$baseName-Symbols$($packageSpec.ArchiveExtension)" $symbolsPackageInputs
+    if ($symbolsPackageInputs.Count -gt 0) {
+        Assert-PackageInputs $symbolsPackageInputs "symbols"
+        New-Archive $Context "$baseName-Symbols$($packageSpec.ArchiveExtension)" $symbolsPackageInputs
+    }
     New-Archive $Context "$baseName$($packageSpec.ArchiveExtension)" $runtimePackageInputs
 }
 
@@ -1217,11 +1234,11 @@ function Run-OIVBuild {
         MtPath                   = $MtPath
     }
 
-    $initialPath = $env:Path
-    $windowsPlatform = Test-IsWindowsPlatform
-    $profile = New-PlatformProfile $options $windowsPlatform
+    $initialPath = $env:PATH
+    $platform = Get-PublishPlatform
+    $profile = New-PlatformProfile $options $platform
     $toolInfo = Resolve-BuildTools $profile $initialPath $options.EchoCommands
-    $context = New-PublishContext $options $toolInfo $windowsPlatform $profile
+    $context = New-PublishContext $options $toolInfo $profile
 
     Set-BuildToolEnvironment $context
     Write-BuildInfo $context

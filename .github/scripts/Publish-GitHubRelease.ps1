@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-Creates or updates an OIViewer GitHub release from prepared runtime and symbols archives.
+Creates or updates an OIViewer GitHub release from prepared archives.
 
 .DESCRIPTION
 Validates immutable tags, optionally moves a rolling tag to the requested source commit, creates the release when
-needed, uploads both archives, and removes obsolete assets only after replacement uploads succeed. GitHub CLI
+needed, uploads all archives, and removes obsolete assets only after replacement uploads succeed. GitHub CLI
 failures are fatal except for an explicitly allowed HTTP 404 used to represent an absent tag or release.
 
 .PARAMETER Repository
@@ -25,11 +25,8 @@ Whether the release must be marked as a prerelease.
 .PARAMETER MutableTag
 Whether an existing tag may move to TargetSha after replacement assets upload successfully.
 
-.PARAMETER RuntimeArchive
-Path to the runtime archive to upload.
-
-.PARAMETER SymbolsArchive
-Path to the matching symbols archive to upload.
+.PARAMETER Archives
+Paths to the release archives to upload.
 
 .NOTES
 Requires the GitHub CLI and a GH_TOKEN environment variable. Dot-sourcing the file loads its functions without
@@ -43,8 +40,7 @@ param(
     [string]$Title,
     [bool]$Prerelease,
     [bool]$MutableTag = $false,
-    [string]$RuntimeArchive,
-    [string]$SymbolsArchive
+    [string[]]$Archives
 )
 
 Set-StrictMode -Version Latest
@@ -159,13 +155,13 @@ function Invoke-ReleasePublication {
         [Parameter(Mandatory)][string]$Title,
         [Parameter(Mandatory)][bool]$Prerelease,
         [bool]$MutableTag = $false,
-        [Parameter(Mandatory)][string]$RuntimeArchive,
-        [Parameter(Mandatory)][string]$SymbolsArchive
+        [Parameter(Mandatory)][string[]]$Archives
     )
 
     if ([string]::IsNullOrWhiteSpace($env:GH_TOKEN)) {
         throw "Release token is not configured."
     }
+    $archiveNames = @($Archives | ForEach-Object { [IO.Path]::GetFileName($_) })
 
     $tagCommitSha = Get-TagCommitSha -Repository $Repository -Tag $Tag
     if (-not $MutableTag -and $null -ne $tagCommitSha -and $tagCommitSha -ne $TargetSha) {
@@ -195,12 +191,8 @@ function Invoke-ReleasePublication {
     }
 
     # Upload first so a failed transfer cannot remove every asset from an existing public release.
-    Invoke-Gh -Arguments @(
-        "release", "upload", $Tag,
-        $RuntimeArchive, $SymbolsArchive,
-        "--repo", $Repository,
-        "--clobber"
-    ) | Out-Null
+    $uploadArguments = @("release", "upload", $Tag) + $Archives + @("--repo", $Repository, "--clobber")
+    Invoke-Gh -Arguments $uploadArguments | Out-Null
 
     if ($null -ne $release) {
         if ($MutableTag -and $tagCommitSha -ne $TargetSha) {
@@ -218,12 +210,8 @@ function Invoke-ReleasePublication {
         }
         Invoke-Gh -Arguments $editArguments | Out-Null
 
-        $expectedAssetNames = @(
-            [IO.Path]::GetFileName($RuntimeArchive),
-            [IO.Path]::GetFileName($SymbolsArchive)
-        )
         # Cleanup is deliberately last: successful replacement assets remain available if later metadata work fails.
-        foreach ($asset in @($release.assets | Where-Object { $_.name -notin $expectedAssetNames })) {
+        foreach ($asset in @($release.assets | Where-Object { $_.name -notin $archiveNames })) {
             Invoke-Gh -Arguments @(
                 "release", "delete-asset", $Tag, $asset.name,
                 "--repo", $Repository,
@@ -233,9 +221,7 @@ function Invoke-ReleasePublication {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_STEP_SUMMARY)) {
-        $runtimeArchiveName = [IO.Path]::GetFileName($RuntimeArchive)
-        $symbolsArchiveName = [IO.Path]::GetFileName($SymbolsArchive)
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Published release assets to $Repository release '$Tag' for ${TargetSha}: $runtimeArchiveName, $symbolsArchiveName."
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Published release assets to $Repository release '$Tag' for ${TargetSha}: $($archiveNames -join ', ')."
     }
 }
 

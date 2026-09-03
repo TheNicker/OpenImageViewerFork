@@ -6,6 +6,7 @@ Describe "Publish-GitHubRelease" {
     BeforeEach {
         $env:GH_TOKEN = "test-token"
         $env:GITHUB_STEP_SUMMARY = ""
+        $archives = @("OIV-windows-runtime.7z", "OIV-linux-runtime.7z", "OIV-symbols.7z")
     }
 
     Context "GitHub CLI failures" {
@@ -50,7 +51,7 @@ Describe "Publish-GitHubRelease" {
             {
                 Invoke-ReleasePublication -Repository "owner/repository" -Tag "OIV-1.2.3" `
                     -TargetSha "expected-sha" -Title "OIV-1.2.3" -Prerelease $false `
-                    -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                    -Archives $archives
             } | Should Throw "already targets"
             Assert-MockCalled Invoke-Gh 0 -ParameterFilter { $Arguments[0] -eq "release" }
         }
@@ -66,9 +67,14 @@ Describe "Publish-GitHubRelease" {
 
             Invoke-ReleasePublication -Repository "owner/repository" -Tag "snapshot" `
                 -TargetSha "new-sha" -Title "OIV-1.2.3.4" -Prerelease $true -MutableTag $true `
-                -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                -Archives $archives
 
-            Assert-MockCalled Invoke-Gh 1 -ParameterFilter { $Arguments[1] -eq "upload" }
+            Assert-MockCalled Invoke-Gh 1 -ParameterFilter {
+                $Arguments[1] -eq "upload" -and
+                $Arguments -contains "OIV-windows-runtime.7z" -and
+                $Arguments -contains "OIV-linux-runtime.7z" -and
+                $Arguments -contains "OIV-symbols.7z"
+            }
             Assert-MockCalled Set-TagCommitSha 1 -Scope It -ParameterFilter {
                 $Tag -eq "snapshot" -and $TargetSha -eq "new-sha"
             }
@@ -93,7 +99,7 @@ Describe "Publish-GitHubRelease" {
             {
                 Invoke-ReleasePublication -Repository "owner/repository" -Tag "snapshot" `
                     -TargetSha "new-sha" -Title "OIV-1.2.3.4" -Prerelease $true -MutableTag $true `
-                    -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                    -Archives $archives
             } | Should Throw "upload failed"
             Assert-MockCalled Set-TagCommitSha 0 -Scope It
         }
@@ -143,7 +149,7 @@ Describe "Publish-GitHubRelease" {
 
             Invoke-ReleasePublication -Repository "owner/repository" -Tag "snapshot" `
                 -TargetSha "new-sha" -Title "OIV-1.2.3.4" -Prerelease $true -MutableTag $true `
-                -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                -Archives $archives
 
             Assert-MockCalled Invoke-Gh 1 -ParameterFilter {
                 $Arguments[1] -eq "create" -and
@@ -161,7 +167,8 @@ Describe "Publish-GitHubRelease" {
                 [PSCustomObject]@{
                     isPrerelease = $false
                     assets = @(
-                        [PSCustomObject]@{ name = "OIV-runtime.7z" },
+                        [PSCustomObject]@{ name = "OIV-windows-runtime.7z" },
+                        [PSCustomObject]@{ name = "OIV-linux-runtime.7z" },
                         [PSCustomObject]@{ name = "OIV-symbols.7z" },
                         [PSCustomObject]@{ name = "obsolete.7z" }
                     )
@@ -180,7 +187,7 @@ Describe "Publish-GitHubRelease" {
             {
                 Invoke-ReleasePublication -Repository "owner/repository" -Tag "OIV-1.2.3" `
                     -TargetSha "expected-sha" -Title "OIV-1.2.3" -Prerelease $false `
-                    -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                    -Archives $archives
             } | Should Throw "upload failed"
             # Upload failure must leave the existing release metadata and asset set untouched.
             Assert-MockCalled Invoke-Gh 0 -ParameterFilter { $Arguments[1] -eq "edit" }
@@ -192,7 +199,7 @@ Describe "Publish-GitHubRelease" {
 
             Invoke-ReleasePublication -Repository "owner/repository" -Tag "OIV-1.2.3" `
                 -TargetSha "expected-sha" -Title "OIV-1.2.3" -Prerelease $false `
-                -RuntimeArchive "OIV-runtime.7z" -SymbolsArchive "OIV-symbols.7z"
+                -Archives $archives
 
             Assert-MockCalled Invoke-Gh 1 -ParameterFilter { $Arguments[1] -eq "upload" }
             Assert-MockCalled Invoke-Gh 1 -ParameterFilter {
@@ -200,7 +207,9 @@ Describe "Publish-GitHubRelease" {
             }
             # Assets replaced through --clobber are expected and must not be removed by stale-asset cleanup.
             Assert-MockCalled Invoke-Gh 0 -ParameterFilter {
-                $Arguments[1] -eq "delete-asset" -and $Arguments[3] -in @("OIV-runtime.7z", "OIV-symbols.7z")
+                $Arguments[1] -eq "delete-asset" -and $Arguments[3] -in @(
+                    "OIV-windows-runtime.7z", "OIV-linux-runtime.7z", "OIV-symbols.7z"
+                )
             }
         }
     }
