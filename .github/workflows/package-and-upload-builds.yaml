@@ -25,7 +25,7 @@ env:
 
 jobs:
   build-package:
-    name: Build release package
+    name: Build ${{ matrix.platform }} release package
     # Manual runs bypass CI validation; automatic runs require a successful push build on the release branch.
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -34,10 +34,18 @@ jobs:
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_branch == (vars.SNAPSHOT_RELEASE_BRANCH || 'master')
       )
-    runs-on: windows-2025-vs2026
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-2025-vs2026
+          - platform: Linux
+            runner: ubuntu-24.04
     concurrency:
-      group: package-releases-${{ inputs.official_release && (github.event.workflow_run.head_sha || github.sha) || 'snapshot' }}
+      group: package-releases-${{ matrix.platform }}-${{ inputs.official_release && (github.event.workflow_run.head_sha || github.sha) || 'snapshot' }}
       cancel-in-progress: ${{ ! inputs.official_release }}
 
     steps:
@@ -54,14 +62,38 @@ jobs:
       - name: Checkout shallow submodules
         run: git submodule update --init --recursive --depth 1
 
-      - name: Build release package
+      - name: Install Linux toolchain and dependencies
+        if: matrix.platform == 'Linux'
+        run: |
+          # Pin the installer so release toolchain setup changes only through review.
+          curl --proto '=https' --tlsv1.2 -fsSLo llvm.sh https://raw.githubusercontent.com/opencollab/llvm-jenkins.debian.net/c5ecff7c7208c8b5225e1f6e6ae6f2539e1d31ea/llvm.sh
+          sudo bash llvm.sh 22
+          sudo apt-get install -y llvm-22 libgl1-mesa-dev libgtk-3-dev libwayland-dev libx11-dev p7zip-full wayland-protocols
+          echo "CC=clang-22" >> "$GITHUB_ENV"
+          echo "CXX=clang++-22" >> "$GITHUB_ENV"
+
+      - name: Build release binaries
         shell: pwsh
-        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE))
+        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE)) -EnablePackage $false
+
+      - name: Bundle Linux libstdc++ runtime
+        if: matrix.platform == 'Linux'
+        run: |
+          for library in libstdc++.so.6 libgcc_s.so.1; do
+            source_path="$(clang++-22 -print-file-name="$library")"
+            test "$source_path" != "$library"
+            test -f "$source_path"
+            cp --dereference "$source_path" "publish/bin/$library"
+          done
+
+      - name: Package release
+        shell: pwsh
+        run: ./publish.ps1 -OfficialBuild $true -OfficialRelease ([bool]::Parse($env:OFFICIAL_RELEASE)) -EnableConfigure $false -EnableBuild $false
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-package
+          name: release-package-${{ matrix.platform }}
           path: publish/**/OIV-*
           if-no-files-found: error
           retention-days: 7
@@ -90,11 +122,12 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Download package artifact
+      - name: Download package artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-package
+          pattern: release-package-*
           path: release-package
+          merge-multiple: true
 
       - name: Select downloaded archives
         id: package
@@ -103,49 +136,50 @@ jobs:
           $archivePattern = '^OIV-.+(?:\.[^.]+)+$'
           $symbolsPattern = '-Symbols(?:\.[^.]+)+$'
           $archives = @(Get-ChildItem -Path "release-package" -Recurse -File | Where-Object { $_.Name -match $archivePattern })
-          $runtimeArchives = @($archives | Where-Object { $_.Name -notmatch $symbolsPattern })
-          $symbolsArchives = @($archives | Where-Object { $_.Name -match $symbolsPattern })
-
-          if ($runtimeArchives.Count -ne 1) {
-              $archiveList = if ($runtimeArchives.Count -eq 0) { "<none>" } else { ($runtimeArchives | ForEach-Object { $_.FullName }) -join "`n" }
-              throw "Expected exactly one runtime archive, found $($runtimeArchives.Count):`n$archiveList"
+          $archiveGroups = [ordered]@{
+              "Windows runtime" = @($archives | Where-Object { $_.Name -notmatch $symbolsPattern -and $_.Name -match '-Win32-[^-]+-[^-.]+\.' })
+              "Linux runtime"   = @($archives | Where-Object { $_.Name -notmatch $symbolsPattern -and $_.Name -match '-linux-[^-]+-[^-.]+\.' })
+              "symbols"         = @($archives | Where-Object { $_.Name -match $symbolsPattern })
+          }
+          foreach ($group in $archiveGroups.GetEnumerator()) {
+              if ($group.Value.Count -ne 1) {
+                  $archiveList = if ($group.Value.Count -eq 0) { "<none>" } else { ($group.Value.FullName -join "`n") }
+                  throw "Expected exactly one $($group.Key) archive, found $($group.Value.Count):`n$archiveList"
+              }
           }
 
-          if ($symbolsArchives.Count -ne 1) {
-              $archiveList = if ($symbolsArchives.Count -eq 0) { "<none>" } else { ($symbolsArchives | ForEach-Object { $_.FullName }) -join "`n" }
-              throw "Expected exactly one symbols archive, found $($symbolsArchives.Count):`n$archiveList"
-          }
-
-          $runtimeArchive = $runtimeArchives[0]
-          $symbolsArchive = $symbolsArchives[0]
+          $windowsRuntimeArchive = $archiveGroups["Windows runtime"][0]
+          $linuxRuntimeArchive = $archiveGroups["Linux runtime"][0]
+          $symbolsArchive = $archiveGroups["symbols"][0]
+          $releaseArchives = @($windowsRuntimeArchive, $linuxRuntimeArchive, $symbolsArchive)
           $officialRelease = [bool]::Parse($env:OFFICIAL_RELEASE)
           $titlePattern = if ($officialRelease) {
               '^(?<title>OIV-\d+\.\d+\.\d+)-.+(?:\.[^.]+)+$'
           } else {
               '^(?<title>OIV-\d+\.\d+\.\d+\.\d+)-[0-9a-f]+-.+(?:\.[^.]+)+$'
           }
-          if ($runtimeArchive.Name -notmatch $titlePattern) {
-              throw "Runtime archive name '$($runtimeArchive.Name)' does not match the selected release mode."
-          }
-
-          $releaseTitle = $Matches.title
-          if ($symbolsArchive.Name -notmatch $titlePattern) {
-              throw "Symbols archive name '$($symbolsArchive.Name)' does not match the selected release mode."
-          }
-          if ($Matches.title -ne $releaseTitle) {
-              throw "Runtime and symbols archive versions do not match: '$($runtimeArchive.Name)', '$($symbolsArchive.Name)'."
+          $releaseTitle = $null
+          foreach ($archive in $releaseArchives) {
+              if ($archive.Name -notmatch $titlePattern) {
+                  throw "Archive name '$($archive.Name)' does not match the selected release mode."
+              }
+              $archiveTitle = $Matches.title
+              if ($releaseTitle -and $archiveTitle -ne $releaseTitle) {
+                  throw "Release archive versions do not match: $(($releaseArchives.Name | ForEach-Object { "'$_'" }) -join ', ')."
+              }
+              $releaseTitle = $archiveTitle
           }
           $releaseTag = if ($officialRelease) { $releaseTitle } else { "snapshot" }
           $prerelease = (-not $officialRelease).ToString().ToLowerInvariant()
 
-          "runtime_archive_path=$($runtimeArchive.FullName)" >> $env:GITHUB_OUTPUT
-          "runtime_archive_name=$($runtimeArchive.Name)" >> $env:GITHUB_OUTPUT
+          "windows_runtime_archive_path=$($windowsRuntimeArchive.FullName)" >> $env:GITHUB_OUTPUT
+          "linux_runtime_archive_path=$($linuxRuntimeArchive.FullName)" >> $env:GITHUB_OUTPUT
           "symbols_archive_path=$($symbolsArchive.FullName)" >> $env:GITHUB_OUTPUT
-          "symbols_archive_name=$($symbolsArchive.Name)" >> $env:GITHUB_OUTPUT
           "release_title=$releaseTitle" >> $env:GITHUB_OUTPUT
           "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
-          "Selected runtime archive $($runtimeArchive.FullName)"
+          "Selected Windows runtime archive $($windowsRuntimeArchive.FullName)"
+          "Selected Linux runtime archive $($linuxRuntimeArchive.FullName)"
           "Selected symbols archive $($symbolsArchive.FullName)"
           "Release title $releaseTitle"
 
@@ -157,7 +191,8 @@ jobs:
           RELEASE_TARGET: ${{ env.PUBLISH_SHA }}
           RELEASE_TITLE: ${{ steps.package.outputs.release_title }}
           PRERELEASE: ${{ steps.package.outputs.prerelease }}
-          RUNTIME_ARCHIVE_PATH: ${{ steps.package.outputs.runtime_archive_path }}
+          WINDOWS_RUNTIME_ARCHIVE_PATH: ${{ steps.package.outputs.windows_runtime_archive_path }}
+          LINUX_RUNTIME_ARCHIVE_PATH: ${{ steps.package.outputs.linux_runtime_archive_path }}
           SYMBOLS_ARCHIVE_PATH: ${{ steps.package.outputs.symbols_archive_path }}
         run: >
           ./.github/scripts/Publish-GitHubRelease.ps1
@@ -167,5 +202,4 @@ jobs:
           -Title $env:RELEASE_TITLE
           -Prerelease ([bool]::Parse($env:PRERELEASE))
           -MutableTag ([bool]::Parse($env:PRERELEASE))
-          -RuntimeArchive $env:RUNTIME_ARCHIVE_PATH
-          -SymbolsArchive $env:SYMBOLS_ARCHIVE_PATH
+          -Archives @($env:WINDOWS_RUNTIME_ARCHIVE_PATH, $env:LINUX_RUNTIME_ARCHIVE_PATH, $env:SYMBOLS_ARCHIVE_PATH)
