@@ -38,7 +38,7 @@ namespace OIV
         }
         owner.fMouseInput->Move(event.deviceIndex, {mouse.deltaX, mouse.deltaY});
         if (mouse.wheelDelta != 0)
-            owner.fMouseInput->Wheel(mouse.wheelDelta);
+            owner.fMouseInput->Wheel(static_cast<double>(mouse.wheelDelta) / LWS::EventMouseWheel::DeltaPerStep);
     }
     void ViewerApplication::InitializeRawInput()
     {

@@ -22,14 +22,16 @@ namespace OIV
 
         void SetButton(uint8_t deviceId, LWS::MouseButton button, bool pressed, bool mouseInside);
         void Move(uint8_t deviceId, LWS::Point delta);
+        // A value of 1.0 is one logical wheel detent (120 platform delta units).
         void Wheel(double steps);
         void Cancel();
         [[nodiscard]] int GetNavigationDirection() const;
 
       private:
 
-        static constexpr size_t ButtonCount = static_cast<size_t>(LWS::MouseButton::Count);
-        using ButtonState                   = std::array<bool, ButtonCount>;
+        static constexpr size_t ButtonCount            = static_cast<size_t>(LWS::MouseButton::Count);
+        static constexpr double ZoomAmountPerWheelStep = 0.2;
+        using ButtonState                              = std::array<bool, ButtonCount>;
 
         void OnButton(uint8_t deviceId, LWS::MouseButton button, bool pressed, bool mouseInside);
         void OnMultiClick(const MouseMultiClickHandler::EventArgs& event);

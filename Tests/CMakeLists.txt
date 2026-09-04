@@ -19,6 +19,7 @@ target_sources(${TargetName} PRIVATE
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_include_directories(${TargetName} PRIVATE ${ExternalFolder}/LInput/Include)
     target_sources(${TargetName} PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Win32/ContextMenuBackend.cpp
     )
