@@ -176,6 +176,8 @@ namespace OIV
         auto& canvas             = fOwner.fWindow.GetCanvasWindow();
         const bool mouseInside   = canvas.IsMouseInClientRect();
         const bool rightCaptured = fCapture.IsCaptured(LWS::MouseButton::Right);
+        // Navigation intentionally reacts to every event by sign. High-resolution wheels can therefore trigger
+        // multiple navigation commands while moving through one logical detent.
         if (mouseInside && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
             fOwner.ExecutePredefinedCommand(steps > 0.0 ? "PreviousSubImage" : "NextSubImage");
         else if (mouseInside && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
@@ -184,9 +186,9 @@ namespace OIV
         {
             const auto position = canvas.GetMousePosition();
             if (rightCaptured)
-                fOwner.Zoom(steps * 0.2);
+                fOwner.Zoom(steps * ZoomAmountPerWheelStep);
             else
-                fOwner.Zoom(steps * 0.2, position.x, position.y);
+                fOwner.Zoom(steps * ZoomAmountPerWheelStep, position.x, position.y);
         }
     }
 
