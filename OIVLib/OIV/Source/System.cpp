@@ -1,26 +1,36 @@
 #include "System.h"
-#include <LLUtils/Exception.h>
+#include "SystemThreadPolicy.h"
+
+#include <LLUtils/PlatformUtility.h>
+
+#include <algorithm>
+
+namespace OIV::internal
+{
+    uint32_t CalculateIdealNumThreadsForMemoryOperations(uint32_t physicalCores, uint32_t logicalCores) noexcept
+    {
+        const uint32_t availableCores = logicalCores != 0 ? logicalCores : physicalCores;
+        uint32_t idealThreads         = 1;
+        if (availableCores != 0)
+        {
+            const uint32_t usablePhysicalCores    = physicalCores != 0 ? std::min(physicalCores, availableCores)
+                                                                       : availableCores;
+            const uint32_t threeQuartersOfLogical = static_cast<uint32_t>(static_cast<uint64_t>(availableCores) * 3 /
+                                                                          4);
+            idealThreads                          = availableCores == usablePhysicalCores
+                                                        ? availableCores
+                                                        : std::max(usablePhysicalCores, threeQuartersOfLogical);
+        }
+        return idealThreads;
+    }
+}  // namespace OIV::internal
+
 namespace OIV
 {
-	uint32_t System::GetIdealNumThreadsForMemoryOperations()
-	{
-		auto cpuCoresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
-
-		if (cpuCoresInfo.logicalCores > cpuCoresInfo.physicalCores)
-		{
-			if (cpuCoresInfo.physicalCores * 2 == cpuCoresInfo.logicalCores)
-			{
-				// with hyper threading it seems like resampling works best on 75% of the virtual/ logical cores.
-				return static_cast<uint32_t>(cpuCoresInfo.physicalCores * 1.5);
-			}
-			else
-			{
-				LL_EXCEPTION_NOT_IMPLEMENT("Unknown CPU cores layout");
-			}
-		}
-		else
-		{
-			return cpuCoresInfo.physicalCores; // no hyper threading.
-		}
-	}
-}
+    uint32_t System::GetIdealNumThreadsForMemoryOperations()
+    {
+        const auto cpuCoresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
+        return internal::CalculateIdealNumThreadsForMemoryOperations(cpuCoresInfo.physicalCores,
+                                                                     cpuCoresInfo.logicalCores);
+    }
+}  // namespace OIV
