@@ -76,3 +76,13 @@ if(OIV_BUILD_RENDERER_GL)
 else()
     target_compile_definitions(${TargetName} PRIVATE OIV_BUILD_RENDERER_GL=0)
 endif()
+
+if(OIV_BUILD_RENDERER_VK)
+    target_compile_definitions(${TargetName} PRIVATE OIV_BUILD_RENDERER_VK=1)
+    target_link_libraries(${TargetName}
+    PRIVATE
+        OIVVKRenderer
+    )
+else()
+    target_compile_definitions(${TargetName} PRIVATE OIV_BUILD_RENDERER_VK=0)
+endif()

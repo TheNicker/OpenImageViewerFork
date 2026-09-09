@@ -51,6 +51,36 @@ if(OIV_BUILD_RENDERER_GL)
     target_link_libraries(${TargetName} PRIVATE OIVGLRenderer)
 endif()
 
+if(OIV_BUILD_RENDERER_VK)
+    find_package(Vulkan REQUIRED)
+    target_compile_definitions(${TargetName} PRIVATE OIV_TEST_VK_RENDERER)
+    target_link_libraries(${TargetName} PRIVATE OIVVKRenderer)
+
+    # Keep Vulkan failure doubles isolated from the normal renderer tests and the real Vulkan loader.
+    add_executable(tests_vk_failures
+        Vulkan/FailureTests.cpp
+        ../OIVLib/Renderers/OIVVKRenderer/Source/VKContext.cpp
+        ../OIVLib/Renderers/OIVVKRenderer/Source/VKPipeline.cpp
+        ../OIVLib/Renderers/OIVVKRenderer/Source/VKRenderer.cpp
+        ../OIVLib/Renderers/OIVVKRenderer/Source/VKTexture.cpp
+    )
+    add_dependencies(tests_vk_failures VKShaders)
+    target_compile_definitions(tests_vk_failures PRIVATE $<TARGET_PROPERTY:OIVVKRenderer,COMPILE_DEFINITIONS>)
+    if(WIN32)
+        target_link_libraries(tests_vk_failures PRIVATE user32)
+    endif()
+    target_include_directories(tests_vk_failures PRIVATE
+        ../OIVLib/Renderers/OIVVKRenderer/Source
+        ../OIVLib/OIV/Include
+    )
+    target_link_libraries(tests_vk_failures PRIVATE Catch2::Catch2WithMain ImageCodec ImageUtil LLUtils::LLUtils Vulkan::Headers)
+    if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        target_link_options(tests_vk_failures PRIVATE "/SUBSYSTEM:CONSOLE" "/ENTRY:wmainCRTStartup")
+    elseif(MINGW)
+        target_link_options(tests_vk_failures PRIVATE "-mconsole" "-municode")
+    endif()
+endif()
+
 if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     target_link_options(${TargetName} PRIVATE "/SUBSYSTEM:CONSOLE")
     target_link_options(${TargetName} PRIVATE "/ENTRY:wmainCRTStartup")

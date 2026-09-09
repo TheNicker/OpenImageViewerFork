@@ -386,3 +386,4 @@ MigrationBackup/
 /CMakeSettings.json
 out/
 build/
+build-linux/
