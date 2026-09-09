@@ -1,4 +1,5 @@
 #include <iomanip>
+#include <string>
 #include <filesystem>
 #include <thread>
 #include <future>
@@ -285,6 +286,127 @@ namespace OIV
         {
             ShowSettings();
         }
+    }
+
+    void ViewerApplication::CMD_ShowSystemInfo([[maybe_unused]] const CommandManager::CommandRequest& request,
+                                                [[maybe_unused]] CommandManager::CommandResult& result)
+    {
+        OIVTextImage* text = fLabelManager.GetTextLabel("systemInfo");
+        if (text != nullptr)
+        {
+            fLabelManager.Remove("systemInfo");
+            fRefreshOperation.Queue();
+            return;
+        }
+
+        text = fLabelManager.GetOrCreateTextLabel("systemInfo");
+
+        IRenderer* renderer = OIV::ApiGlobal::sPictureRenderer->GetRenderer();
+        const char* backendName = renderer ? renderer->GetBackendName() : "Unknown";
+        const char* gpuName = renderer ? renderer->GetGPUName() : "Unknown";
+        const char* apiVersion = renderer ? renderer->GetAPIVersion() : "Unknown";
+        const char* driverVersion = renderer ? renderer->GetDriverVersion() : "Unknown";
+
+        LLUtils::native_string_type osName;
+#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
+        try
+        {
+            LLUtils::PlatformUtility::OSVersion ver = LLUtils::PlatformUtility::GetOSVersion();
+            std::ostringstream oss;
+            oss << "Windows " << ver.major << "." << ver.minor << "." << ver.build;
+            osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(oss.str());
+        }
+        catch (...)
+        {
+            osName = LLUTILS_TEXT("Windows");
+        }
+#else
+        {
+            std::ifstream osRelease("/etc/os-release");
+            if (osRelease.is_open())
+            {
+                std::string line;
+                while (std::getline(osRelease, line))
+                {
+                    if (line.starts_with("PRETTY_NAME="))
+                    {
+                        std::string prettyName = line.substr(12);
+                        if (!prettyName.empty() && prettyName.front() == '"' && prettyName.back() == '"')
+                            prettyName = prettyName.substr(1, prettyName.size() - 2);
+                        else if (!prettyName.empty() && prettyName.front() == '\'')
+                            prettyName = prettyName.substr(1, prettyName.size() - 2);
+                        osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(prettyName);
+                        break;
+                    }
+                }
+            }
+            if (osName.empty())
+            {
+                std::array<char, 128> buffer;
+                std::string result;
+                std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("uname -srmo", "r"), pclose);
+                if (pipe)
+                {
+                    while (!feof(pipe.get()))
+                    {
+                        if (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+                            result += buffer.data();
+                    }
+                    result = LLUtils::StringUtility::rtrim(result, "\n");
+                    osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(result);
+                }
+            }
+            if (osName.empty())
+                osName = LLUTILS_TEXT("Linux");
+        }
+#endif
+
+        auto coresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
+        std::ostringstream coresOss;
+        coresOss << coresInfo.physicalCores << " physical / " << coresInfo.logicalCores << " logical";
+        LLUtils::native_string_type cpuCores = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(coresOss.str());
+
+#if defined(NDEBUG)
+        LLUtils::native_string_type buildType = LLUTILS_TEXT("Release");
+#else
+        LLUtils::native_string_type buildType = LLUTILS_TEXT("Debug");
+#endif
+
+        auto message = MessageHelper::CreateSystemInfoMessage(
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string("OpenImageViewer")),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
+                std::string("Version ") + OIV::FormatFullVersion(OIV::CurrentVersion)),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(OIV_GIT_SHORT_HASH)),
+            buildType,
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(backendName)),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(gpuName)),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(apiVersion)),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(driverVersion)),
+            osName,
+            cpuCores
+        );
+
+        int gpuIndex = renderer ? renderer->GetSelectedGPUIndex() : -1;
+        if (gpuIndex >= 0)
+            message += LLUTILS_TEXT("\nGPU Index: ") +
+                       LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::to_string(gpuIndex));
+        else
+            message += LLUTILS_TEXT("\nGPU Index: Auto");
+
+        text->SetText(message);
+        text->SetBackgroundColor({0, 0, 0, 216});
+        text->SetFontPath(LabelManager::sFixedFontPath);
+        text->SetFontSize(12);
+        text->SetOutlineWidth(2);
+        text->SetPosition({20, 60});
+        text->SetFilterType(OIV_Filter_type::FT_None);
+        text->SetImageRenderMode(IRM_Overlay);
+        text->SetScale({1.0, 1.0});
+        text->SetOpacity(1.0);
+        text->SetVisible(true);
+
+        if (text->IsDirty())
+            fRefreshOperation.Queue();
     }
 
     void ViewerApplication::CMD_OpenFile([[maybe_unused]] const CommandManager::CommandRequest& request,
@@ -696,6 +818,7 @@ namespace OIV
              {"cmd_view_state", std::bind(&ViewerApplication::CMD_ViewState, this, _1, _2)},
              {"cmd_toggle_correction", std::bind(&ViewerApplication::CMD_ToggleColorCorrection, this, _1, _2)},
              {"cmd_toggle_keybindings", std::bind(&ViewerApplication::CMD_ToggleKeyBindings, this, _1, _2)},
+             {"cmd_show_system_info", std::bind(&ViewerApplication::CMD_ShowSystemInfo, this, _1, _2)},
              {"cmd_axis_aligned_transform", std::bind(&ViewerApplication::CMD_AxisAlignedTransform, this, _1, _2)},
              {"cmd_open_file", std::bind(&ViewerApplication::CMD_OpenFile, this, _1, _2)},
              {"cmd_zoom", std::bind(&ViewerApplication::CMD_Zoom, this, _1, _2)},

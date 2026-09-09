@@ -4,7 +4,13 @@
 #include <OIVAppCore/ConfigurationLoader.h>
 #include <ImageCodec.h>
 
+#include <Version.h>
+
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 namespace OIV
 {
@@ -76,6 +82,56 @@ namespace OIV
 
             messageValues.emplace_back(row.key, values);
         }
+
+        message += LLUTILS_TEXT('\n');
+        message += MessageFormatter::FormatMetaText(args);
+        return message;
+    }
+
+    LLUtils::native_string_type MessageHelper::CreateSystemInfoMessage(const LLUtils::native_string_type& appName,
+                                                                       const LLUtils::native_string_type& appVersion,
+                                                                       const LLUtils::native_string_type& gitHash,
+                                                                       const LLUtils::native_string_type& buildType,
+                                                                       const LLUtils::native_string_type& backendName,
+                                                                       const LLUtils::native_string_type& gpuName,
+                                                                       const LLUtils::native_string_type& apiVersion,
+                                                                       const LLUtils::native_string_type& driverVersion,
+                                                                       const LLUtils::native_string_type& osName,
+                                                                       const LLUtils::native_string_type& cpuCores)
+    {
+        LLUtils::native_string_type message = MessageFormatter::DefaultHeaderColor +
+                                              LLUTILS_TEXT("System information\n");
+
+        MessageFormatter::FormatArgs args;
+        args.keyColor                                   = MessageFormatter::DefaultKeyColor;
+        args.maxLines                                   = 24;
+        args.minSpaceFromValue                          = 3;
+        args.spacer                                     = '.';
+        args.valueColor                                 = MessageFormatter::DefaultValueColor;
+        args.spaceBetweenColumns                        = 3;
+        MessageFormatter::MessagesValues& messageValues = args.messageValues;
+
+        messageValues.emplace_back("Application", MessageFormatter::ValueObjectList{
+            MessageFormatter::ValueObject(appName),
+            MessageFormatter::ValueObject(appVersion),
+            MessageFormatter::ValueObject(gitHash),
+            MessageFormatter::ValueObject(buildType)
+        });
+
+        messageValues.emplace_back("Operating System", MessageFormatter::ValueObjectList{
+            MessageFormatter::ValueObject(osName)
+        });
+
+        messageValues.emplace_back("CPU", MessageFormatter::ValueObjectList{
+            MessageFormatter::ValueObject(cpuCores)
+        });
+
+        messageValues.emplace_back("Renderer", MessageFormatter::ValueObjectList{
+            MessageFormatter::ValueObject(backendName),
+            MessageFormatter::ValueObject(gpuName),
+            MessageFormatter::ValueObject(apiVersion),
+            MessageFormatter::ValueObject(driverVersion)
+        });
 
         message += LLUTILS_TEXT('\n');
         message += MessageFormatter::FormatMetaText(args);
