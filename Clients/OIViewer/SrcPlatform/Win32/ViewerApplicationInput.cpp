@@ -7,6 +7,7 @@
 
 #include <LInput/Keys/KeyCombination.h>
 #include <LWS/Win32/EventWin32.hpp>
+#include <LWS/Win32/WindowExtensions.hpp>
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/PlatformUtility.h>
@@ -43,18 +44,20 @@ namespace OIV
     void ViewerApplication::InitializeRawInput()
     {
         using namespace LInput;
-        std::ignore = LWS::Win32::SetPlatformCallback(fWindow,
-                                                      [this](const LWS::Win32::PlatformEvent& event)
-                                                      {
-                                                          std::optional<LRESULT> result;
-                                                          HandleEventCallback(
-                                                              [&]()
-                                                              {
-                                                                  result = fRawInputState->HandlePlatformEvent(event);
-                                                                  return false;
-                                                              });
-                                                          return result;
-                                                      });
+        auto connection = LWS::Win32::Listen(fWindow.GetWindow(),
+                                             [this](const LWS::Win32::PlatformEvent& event)
+                                             {
+                                                 std::optional<LRESULT> result;
+                                                 HandleEventCallback(
+                                                     [&]()
+                                                     {
+                                                         result = fRawInputState->HandlePlatformEvent(event);
+                                                         return false;
+                                                     });
+                                                 return result;
+                                             });
+        if (connection.has_value())
+            fPlatformConnection = std::move(*connection);
         fRawInputState->rawInput.AddDevice(RawInput::UsagePage::GenericDesktopControls,
                                            RawInput::GenericDesktopControlsUsagePage::Mouse,
                                            RawInput::Flags::EnableBackground);
@@ -102,7 +105,7 @@ namespace OIV
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
-        if (std::holds_alternative<LWS::EventResize>(eventData))
+        if (std::holds_alternative<LWS::EventClientAreaSizeChanged>(eventData))
         {
             fRefreshOperation.Begin();
             UpdateWindowSize();
@@ -145,7 +148,7 @@ namespace OIV
             if (fileToLoad[characterCount - 1] == L'\0')
             {
                 owner.LoadFile(fileToLoad, IMCodec::PluginTraverseMode::NoTraverse);
-                owner.fWindow.SetVisible(true);
+                std::ignore = owner.fWindow.GetWindow().SetVisible(true);
                 return TRUE;
             }
         }
@@ -156,7 +159,7 @@ namespace OIV
     {
         if (std::holds_alternative<LWS::EventMouseMove>(eventData))
             UpdateTexelPos();
-        else if (std::holds_alternative<LWS::EventClose>(eventData))
+        else if (std::holds_alternative<LWS::EventCloseRequested>(eventData))
             CloseApplication(false);
         else if (std::holds_alternative<LWS::EventPaint>(eventData) && !fIsFirstFrameDisplayed)
         {
@@ -177,9 +180,9 @@ namespace OIV
         if (result != WAIT_OBJECT_0)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Mutex ownership cannot be acquired.");
 
-        fWindow.SetVisible(false);
+        std::ignore = fWindow.GetWindow().SetVisible(false);
         if (!closeToTray || FindTrayBarWindow() != 0)
-            fWindow.Destroy();
+            std::ignore = fWindow.GetWindow().Destroy();
         else
             fWindow.SetIsTrayWindow(true);
 

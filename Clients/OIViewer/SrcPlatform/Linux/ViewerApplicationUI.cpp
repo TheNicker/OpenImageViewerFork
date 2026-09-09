@@ -9,6 +9,7 @@ namespace OIV
 {
     ViewerApplication::~ViewerApplication()
     {
+        fUiLifetime.reset();
         fIsShuttingDown = true;
         if (fCountingColorsThread.joinable())
             fCountingColorsThread.join();

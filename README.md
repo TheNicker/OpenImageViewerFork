@@ -27,7 +27,28 @@ For more information visit [www.openimageviewer.com](https://www.openimageviewer
 
 Windows is the supported viewer target. 64-bit builds are the official release path. 32-bit builds may compile and run but are not part of the official release flow.
 
-Non-Windows viewer clients are not implemented yet. Core library and test builds may be configured with `-DOIV_BUILD_CLIENT=OFF` when working outside Windows.
+The Linux Wayland viewer is available as an experimental, unofficial target. Core library and test builds may be
+configured with `-DOIV_BUILD_CLIENT=OFF` when a viewer executable is not required.
+
+### Window and rendering coordinates
+
+OIViewer configures the same logical client area on every window-system backend. Its initial `946 x 602` client size
+uses 96-DPI logical units and is calibrated to approximate the historical `1200 x 800` native Win32 window at 125%
+scaling. The complete outer size remains an operating-system decision and can vary with DPI, theme, and decoration
+policy. The image sidebar reserves 160 logical layout units, corresponding to 200 native pixels at the 125% reference;
+Win32 privately subtracts its native scrollbar width from the child client area so the complete sidebar still occupies
+that allocation. Its font, row, and displayed-thumbnail dimensions use the same reference calibration so DPI scaling
+does not enlarge the historical sidebar presentation.
+
+Window layout and input enter through LWS logical coordinates. Rendering uses the exact framebuffer size reported in
+the same `ClientAreaSize` snapshot, and OIViewer converts pointer positions to that framebuffer coordinate space before
+applying image transforms. This keeps the renderer, zoom/pan calculations, and high-DPI presentation consistent
+without a platform-specific outer-window sizing API.
+
+On Wayland, logical units are compositor surface coordinates rather than physical-monitor DPI. OIViewer uses
+`wp_fractional_scale_v1` with `wp_viewporter` when available and otherwise uses the entered outputs' integer scale.
+Scale-matched buffers keep 100% image zoom pixel-accurate; the compositor controls top-level placement and may adjust
+the requested logical size.
 
 ### Windows Runtime Notes
 

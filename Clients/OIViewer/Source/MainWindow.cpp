@@ -1,14 +1,15 @@
 #include "MainWindow.h"
 
+#include <cmath>
 #include <utility>
 
 namespace OIV
 {
     LWS::Result MainWindow::Create(const LWS::WindowConfig& config)
     {
-        const LWS::Result result = LWS::Window::Create(config);
+        const LWS::Result result = fWindow.Create(config);
         if (result == LWS::Result::Success)
-            OnCreate();
+            return OnCreate();
         return result;
     }
 
@@ -17,43 +18,33 @@ namespace OIV
         if (type == fCurrentCursorType || type < CursorType::SystemDefault || type >= CursorType::Count)
             return;
 
-        if (!fCursorsInitialized)
-        {
-            fCursors[static_cast<size_t>(CursorType::SystemDefault)].setCursorShape(LWS::CursorShape::Arrow);
-            fCursors[static_cast<size_t>(CursorType::Arrow)].setCursorShape(LWS::CursorShape::Arrow);
-            fCursors[static_cast<size_t>(CursorType::East)].setCursorShape(LWS::CursorShape::SizeEW);
-            fCursors[static_cast<size_t>(CursorType::NorthEast)].setCursorShape(LWS::CursorShape::SizeNESW);
-            fCursors[static_cast<size_t>(CursorType::North)].setCursorShape(LWS::CursorShape::SizeNS);
-            fCursors[static_cast<size_t>(CursorType::NorthWest)].setCursorShape(LWS::CursorShape::SizeNWSE);
-            fCursors[static_cast<size_t>(CursorType::West)].setCursorShape(LWS::CursorShape::SizeEW);
-            fCursors[static_cast<size_t>(CursorType::SouthWest)].setCursorShape(LWS::CursorShape::SizeNESW);
-            fCursors[static_cast<size_t>(CursorType::South)].setCursorShape(LWS::CursorShape::SizeNS);
-            fCursors[static_cast<size_t>(CursorType::SouthEast)].setCursorShape(LWS::CursorShape::SizeNWSE);
-            fCursors[static_cast<size_t>(CursorType::SizeAll)].setCursorShape(LWS::CursorShape::SizeAll);
-            fCursorsInitialized = true;
-        }
-
         fCurrentCursorType = type;
-        SetMouseCursor(type == CursorType::SystemDefault ? nullptr : &fCursors[static_cast<size_t>(type)]);
+        if (type == CursorType::SystemDefault)
+            std::ignore = fWindow.ResetMouseCursor();
+        else
+            std::ignore = fWindow.SetMouseCursor(fCursors[static_cast<size_t>(type) - 1]);
     }
 
-    void MainWindow::OnCreate()
+    LWS::Result MainWindow::OnCreate()
     {
         fUseMainWindowAsCanvas = UseMainWindowAsCanvas();
         if (!fUseMainWindowAsCanvas)
         {
             const LWS::WindowConfig canvasConfig{
-                .position = {0, 0},
-                .styles   = LWS::WindowStyle::ChildWindow,
+                .parent      = &fWindow,
+                .position    = LWS::Point{0, 0},
+                .transparent = true,
             };
-            fCanvasWindow.SetParent(this);
-            if (fCanvasWindow.Create(canvasConfig) != LWS::Result::Success)
-                return;
-
-            fCanvasWindow.SetTransparent(true);
+            const LWS::Result result = fCanvasWindow.Create(canvasConfig);
+            if (result != LWS::Result::Success)
+            {
+                std::ignore = fWindow.Destroy();
+                return result;
+            }
         }
         SetApplicationIcon();
         UpdateLayout();
+        return LWS::Result::Success;
     }
 
     bool MainWindow::GetShowImageControl() const
@@ -64,27 +55,29 @@ namespace OIV
     bool MainWindow::GetShowStatusBar() const
     {
         return fShowStatusBar &&
-               ((GetWindowStyles() & (LWS::WindowStyle::Caption | LWS::WindowStyle::CloseButton |
-                                      LWS::WindowStyle::MinimizeButton | LWS::WindowStyle::MaximizeButton)) !=
+               ((fWindow.GetWindowStyles() & (LWS::WindowStyle::Caption | LWS::WindowStyle::CloseButton |
+                                              LWS::WindowStyle::MinimizeButton | LWS::WindowStyle::MaximizeButton)) !=
                 LWS::WindowStyle::NoStyle);
     }
 
     void MainWindow::UpdateLayout()
     {
-        LWS::Size canvasSize             = GetClientSize();
-        constexpr int32_t imageListWidth = 200;
+        LWS::LogicalSize canvasSize      = fWindow.GetClientSize();
+        constexpr int32_t imageListWidth = 160;
         if (fShowImageControl)
             canvasSize.x -= imageListWidth;
 
         UpdateNativeStatusBar(canvasSize);
         if (!fUseMainWindowAsCanvas)
-            fCanvasWindow.SetPlacement({.position = {0, 0}, .size = canvasSize});
+            std::ignore = fCanvasWindow.SetPlacement({.position = LWS::Point{0, 0}, .clientSize = canvasSize});
 
-        if (fImageControl.GetHandle() != 0)
+        if (fImageControl.GetWindow().IsCreated())
         {
             if (fShowImageControl)
-                fImageControl.SetPlacement({.position = {canvasSize.x, 0}, .size = {imageListWidth, canvasSize.y}});
-            fImageControl.SetVisible(fShowImageControl);
+                std::ignore = fImageControl.GetWindow().SetPlacement(
+                    {.position   = LWS::Point{canvasSize.x, 0},
+                     .clientSize = {GetImageControlClientWidth(imageListWidth), canvasSize.y}});
+            std::ignore = fImageControl.GetWindow().SetVisible(fShowImageControl);
         }
     }
 
@@ -102,33 +95,48 @@ namespace OIV
         if (show == fShowImageControl)
             return;
 
-        fShowImageControl = show;
-        if (fImageControl.GetHandle() == 0)
+        if (show && !fImageControl.GetWindow().IsCreated())
         {
             const LWS::WindowConfig imageControlConfig{
-                .position        = {0, 0},
-                .styles          = LWS::WindowStyle::ChildWindow,
-                .eraseBackground = fImageControl.GetBackendId() != LWS::BackendId::Wayland,
+                .parent          = &fWindow,
+                .position        = LWS::Point{0, 0},
+                .eraseBackground = fImageControl.GetWindow().GetBackendId() != LWS::BackendId::Wayland,
             };
-            fImageControl.SetParent(this);
-            std::ignore = fImageControl.Create(imageControlConfig);
+            if (fImageControl.GetWindow().Create(imageControlConfig) != LWS::Result::Success)
+                return;
+            PrepareImageControlLayout();
         }
+        fShowImageControl = show;
         UpdateLayout();
     }
 
-    LWS::Handle MainWindow::GetCanvasHandle() const
+    LWS::PixelSize MainWindow::GetCanvasPixelSize() const
     {
-        return fUseMainWindowAsCanvas ? GetHandle() : fCanvasWindow.GetHandle();
+        const auto& canvas = fUseMainWindowAsCanvas ? fWindow : fCanvasWindow;
+        const auto size    = canvas.GetClientAreaSize();
+        if (size.has_value())
+            return size->pixels;
+        const auto logical = canvas.GetClientSize();
+        return {logical.x, logical.y};
     }
 
-    LWS::Handle MainWindow::GetNativeHandle() const
+    LWS::Point MainWindow::GetCanvasMousePosition() const
     {
-        return GetHandle();
+        const auto& canvas            = fUseMainWindowAsCanvas ? fWindow : fCanvasWindow;
+        const auto size               = canvas.GetClientAreaSize();
+        const LWS::Point position     = canvas.GetMousePosition();
+        const LWS::ContentScale scale = size.has_value() ? size->Scale() : LWS::ContentScale{};
+        return {static_cast<int32_t>(std::lround(position.x * scale.x)),
+                static_cast<int32_t>(std::lround(position.y * scale.y))};
     }
 
-    LWS::Size MainWindow::GetCanvasSize() const
+    LWS::Point MainWindow::GetWindowMousePosition() const
     {
-        return fUseMainWindowAsCanvas ? GetClientSize() : fCanvasWindow.GetClientSize();
+        const auto size               = fWindow.GetClientAreaSize();
+        const LWS::Point position     = fWindow.GetMousePosition();
+        const LWS::ContentScale scale = size.has_value() ? size->Scale() : LWS::ContentScale{};
+        return {static_cast<int32_t>(std::lround(position.x * scale.x)),
+                static_cast<int32_t>(std::lround(position.y * scale.y))};
     }
 
     ImageControl& MainWindow::GetImageControl()
@@ -138,47 +146,12 @@ namespace OIV
 
     LWS::Window& MainWindow::GetCanvasWindow()
     {
-        return fUseMainWindowAsCanvas ? static_cast<LWS::Window&>(*this) : fCanvasWindow;
+        return fUseMainWindowAsCanvas ? fWindow : fCanvasWindow;
     }
 
     void MainWindow::ShowCanvas()
     {
         if (!fUseMainWindowAsCanvas)
-            fCanvasWindow.SetVisible(true);
-    }
-
-    void MainWindow::SetDestoryOnClose(bool destroyOnClose)
-    {
-        SetDestroyOnClose(destroyOnClose);
-    }
-
-    void MainWindow::SetForground()
-    {
-        SetForeground();
-    }
-
-    void MainWindow::SetPosition(int32_t x, int32_t y)
-    {
-        LWS::Window::SetPosition({x, y});
-    }
-
-    void MainWindow::SetSize(uint32_t width, uint32_t height)
-    {
-        LWS::Window::SetSize({static_cast<int32_t>(width), static_cast<int32_t>(height)});
-    }
-
-    void MainWindow::SetWindowDisplayState(LWS::WindowDisplayState state)
-    {
-        SetDisplayState(state);
-    }
-
-    LWS::WindowDisplayState MainWindow::GetWindowDisplayState() const
-    {
-        return GetDisplayState();
-    }
-
-    bool MainWindow::IsMouseCursorInClientRect() const
-    {
-        return IsMouseInClientRect();
+            std::ignore = fCanvasWindow.SetVisible(true);
     }
 }  // namespace OIV

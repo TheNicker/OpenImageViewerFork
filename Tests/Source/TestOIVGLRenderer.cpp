@@ -5,10 +5,10 @@
     #include <Image.h>
     #include <OIVGLRendererFactory.h>
 
-    #if defined(LWS_PLATFORM_WAYLAND)
+    #if defined(LWS_HAS_WAYLAND_BACKEND)
         #include <GL/glew.h>
         #include <LWS/Platform.hpp>
-        #include <LWS/Wayland/PlatformWayland.hpp>
+        #include <LWS/Wayland/WindowExtensions.hpp>
         #include <LWS/Window.hpp>
     #endif
 
@@ -56,7 +56,7 @@ namespace
         return std::make_shared<IMCodec::Image>(imageItem, IMCodec::ImageItemType::Unknown);
     }
 
-    #if defined(LWS_PLATFORM_WAYLAND)
+    #if defined(LWS_HAS_WAYLAND_BACKEND)
     std::array<uint8_t, 4> ReadPixel(int32_t x, int32_t y)
     {
         std::array<uint8_t, 4> pixel{};
@@ -77,26 +77,26 @@ TEST_CASE("OpenGL renderer factory implements the current renderer contract", "[
     REQUIRE(renderer->RemoveRenderable(&renderable) == 0);
 }
 
-    #if defined(LWS_PLATFORM_WAYLAND)
+    #if defined(LWS_HAS_WAYLAND_BACKEND)
 TEST_CASE("OpenGL renderer draws canvas, background checkers, and selection", "[renderer][opengl][wayland]")
 {
-    LWS::Platform::Session platform;
-    if (!platform)
+    LWS::PlatformContext platform;
+    if (platform.Init({.backend = LWS::BackendId::Wayland}) != LWS::Result::Success)
         SKIP("No Wayland compositor is available");
 
-    LWS::Window window;
+    LWS::Window window(platform);
     const LWS::WindowConfig windowConfig{
-        .size            = {64, 64},
+        .clientSize      = {64, 64},
         .visible         = true,
         .eraseBackground = false,
     };
     REQUIRE(window.Create(windowConfig) == LWS::Result::Success);
-    LWS::Platform::refreshMonitors();
+    std::ignore = platform.RefreshMonitors();
 
     const OIV::IRendererSharedPtr renderer = OIV::GLRendererFactory::Create();
     REQUIRE(renderer->Init({
-                .container     = window.GetHandle(),
-                .nativeDisplay = LWS::Wayland::GetDisplay(),
+                .container     = reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(window)),
+                .nativeDisplay = *LWS::Wayland::GetDisplay(window),
             }) == 0);
 
     GLuint framebuffer{};

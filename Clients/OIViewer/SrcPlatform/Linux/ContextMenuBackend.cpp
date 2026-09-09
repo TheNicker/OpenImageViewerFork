@@ -9,7 +9,7 @@ namespace OIV::detail
         bool visible = false;
     };
 
-    ContextMenuBackend::ContextMenuBackend([[maybe_unused]] LWS::Handle windowHandle)
+    ContextMenuBackend::ContextMenuBackend([[maybe_unused]] LWS::Window& window)
         : fNativeState(std::make_unique<NativeState>())
     {
     }

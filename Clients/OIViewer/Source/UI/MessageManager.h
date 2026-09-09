@@ -5,6 +5,7 @@
 #include <LLUtils/EnumClassBitwise.h>
 #include <LLUtils/StopWatch.h>
 #include <LWS/Timer.hpp>
+#include <LWS/Window.hpp>
 #include <OIVShared/RecursiveDelayOp.h>
 
 namespace OIV
@@ -49,7 +50,7 @@ namespace OIV
     {
       public:
 
-        MessageManager(LWS::Handle associatedTimerWindow, LabelManager* labelManager, size_t maxMessages,
+        MessageManager(LWS::Window& associatedWindow, LabelManager* labelManager, size_t maxMessages,
                        RequestRefreshCallbackType callback);
         void SetUserMessage(uint32_t groupID, MessageFlags commandGroup, const LLUtils::native_string_type& message);
         void UpdateMessagesPosition();
@@ -69,7 +70,6 @@ namespace OIV
 
       private:
 
-        LWS::Handle fWindow{};
         LLUtils::UniqueIdProvider<uint16_t> fMessageIDProvider{1};
         LabelManager* fLabelManager{};
         size_t fMaxMessages{};

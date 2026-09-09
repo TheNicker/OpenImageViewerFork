@@ -2,16 +2,15 @@
 
 #include <Windows.h>
 
+#include <LWS/Win32/WindowExtensions.hpp>
+
 #include <map>
 
 namespace OIV::detail
 {
     struct ContextMenuBackend::NativeState
     {
-        explicit NativeState(LWS::Handle windowHandle)
-            : window(reinterpret_cast<HWND>(windowHandle)), menu(CreatePopupMenu())
-        {
-        }
+        explicit NativeState(HWND windowHandle) : window(windowHandle), menu(CreatePopupMenu()) {}
 
         ~NativeState()
         {
@@ -24,8 +23,8 @@ namespace OIV::detail
         bool visible = false;
     };
 
-    ContextMenuBackend::ContextMenuBackend(LWS::Handle windowHandle)
-        : fNativeState(std::make_unique<NativeState>(windowHandle))
+    ContextMenuBackend::ContextMenuBackend(LWS::Window& window)
+        : fNativeState(std::make_unique<NativeState>(*LWS::Win32::GetHwnd(window)))
     {
     }
 

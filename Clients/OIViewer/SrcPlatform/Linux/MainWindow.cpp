@@ -9,32 +9,35 @@ namespace OIV
     {
     };
 
-    MainWindow::MainWindow() : fNativeState(std::make_unique<NativeState>())
+    MainWindow::MainWindow(LWS::PlatformContext& platform)
+        : fWindow(platform), fCanvasWindow(platform), fImageControl(platform),
+          fNativeState(std::make_unique<NativeState>())
     {
-        std::ignore = AddEventListener(
-            [this](const LWS::AnyEvent& eventData) noexcept
-            {
-                try
-                {
-                    return HandleWindowEvent(eventData);
-                }
-                catch (...)
-                {
-                    return true;
-                }
-            });
+        auto connection = fWindow.Listen(
+            [this](const LWS::AnyEvent& eventData)
+            { return HandleWindowEvent(eventData) ? LWS::EventResponse::Handled : LWS::EventResponse::Unhandled; });
+        if (connection.has_value())
+            fEventConnection = std::move(*connection);
     }
 
     MainWindow::~MainWindow() = default;
 
     bool MainWindow::UseMainWindowAsCanvas() const
     {
-        return LWS::Platform::supports(LWS::Platform::Feature::ServerSideDecorations) ||
-               LWS::Platform::supports(LWS::Platform::Feature::HostWindowFrame);
+        const auto& platform = fWindow.GetPlatformContext();
+        return platform.Supports(LWS::PlatformFeature::ServerSideDecorations).value_or(false) ||
+               platform.Supports(LWS::PlatformFeature::HostWindowFrame).value_or(false);
     }
 
+    int32_t MainWindow::GetImageControlClientWidth(int32_t layoutWidth) const
+    {
+        return layoutWidth;
+    }
+
+    void MainWindow::PrepareImageControlLayout() {}
+
     void MainWindow::SetApplicationIcon() {}
-    void MainWindow::UpdateNativeStatusBar([[maybe_unused]] LWS::Size& canvasSize) {}
+    void MainWindow::UpdateNativeStatusBar([[maybe_unused]] LWS::LogicalSize& canvasSize) {}
 
     void MainWindow::SetStatusBarText([[maybe_unused]] LLUtils::native_string_type message, [[maybe_unused]] int part,
                                       [[maybe_unused]] int type)
@@ -43,10 +46,8 @@ namespace OIV
 
     bool MainWindow::HandleWindowEvent(const LWS::AnyEvent& eventData)
     {
-        if (std::holds_alternative<LWS::EventResize>(eventData))
+        if (std::holds_alternative<LWS::EventClientAreaSizeChanged>(eventData))
             UpdateLayout();
-        else if (std::holds_alternative<LWS::EventWindowDestroyed>(eventData))
-            LWS::Platform::requestQuit();
         return false;
     }
 

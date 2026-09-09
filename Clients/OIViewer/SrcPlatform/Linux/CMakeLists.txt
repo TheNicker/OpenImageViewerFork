@@ -11,7 +11,6 @@ target_sources(OIViewer PRIVATE
     ClipboardSetup.cpp
     ContextMenuBackend.cpp
     EntryPoint.cpp
-    EventSync.cpp
     ExceptionHandler.cpp
     ExceptionHandler.h
     ImageControl.cpp

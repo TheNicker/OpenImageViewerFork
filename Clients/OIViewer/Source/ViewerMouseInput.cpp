@@ -8,7 +8,7 @@
 
 namespace OIV
 {
-    ViewerMouseInput::ViewerMouseInput(ViewerApplication& owner) : fOwner(owner)
+    ViewerMouseInput::ViewerMouseInput(ViewerApplication& owner) : fOwner(owner), fMultiClick(owner.fPlatform, 500, 2)
     {
         fMultiClick.OnMouseClickEvent.Add([this](const auto& event) { OnMultiClick(event); });
     }
@@ -38,7 +38,6 @@ namespace OIV
         if (state == nullptr)
             return;
 
-        auto& canvas             = fOwner.fWindow.GetCanvasWindow();
         const bool leftDown      = state->at(static_cast<size_t>(LWS::MouseButton::Left));
         const bool rightDown     = state->at(static_cast<size_t>(LWS::MouseButton::Right));
         const bool rightCaptured = fCapture.IsCaptured(LWS::MouseButton::Right);
@@ -60,7 +59,7 @@ namespace OIV
                 {
                     anchor->SetImageRenderMode(OIV_Image_Render_mode::IRM_Overlay);
                     anchor->SetPosition(static_cast<LLUtils::PointF64>(
-                        static_cast<LLUtils::PointI32>(canvas.GetMousePosition()) -
+                        static_cast<LLUtils::PointI32>(fOwner.fWindow.GetCanvasMousePosition()) -
                         static_cast<LLUtils::PointI32>(anchor->GetImage()->GetDimensions()) / 2));
                     anchor->SetScale({1.0, 1.0});
                     anchor->SetOpacity(0.5);
@@ -72,33 +71,31 @@ namespace OIV
 
         if (button == LWS::MouseButton::Left)
         {
-            if (!pressed)
-                fOwner.fWindow.SetLockMouseToWindowMode(LWS::LockMouseToWindowMode::NoLock);
-
             if (pressed && rightDown && mouseInside)
             {
                 fOwner.fRockerGestureActivate = true;
                 fOwner.fContextMenuTimer.SetInterval(0);
                 fOwner.JumpFiles(-1);
             }
-            else if (!rightDown && !rightCaptured && !LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) &&
-                     !fOwner.fWindow.IsFullScreen())
+            else if (pressed && !rightDown && !rightCaptured &&
+                     !fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Alt).value_or(false) &&
+                     fOwner.fWindow.GetWindow().GetWindowMode() == LWS::WindowMode::Windowed)
             {
-                const auto mode = LWS::Platform::isKeyPressed(LWS::KeyCode::Control)
-                                      ? LWS::LockMouseToWindowMode::LockResize
-                                      : LWS::LockMouseToWindowMode::LockMove;
-                fOwner.fWindow.SetLockMouseToWindowMode(pressed ? mode : LWS::LockMouseToWindowMode::NoLock);
+                const auto operation = fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Control).value_or(false)
+                                           ? LWS::WindowDragOperation::ResizeNearest
+                                           : LWS::WindowDragOperation::Move;
+                std::ignore          = fOwner.fWindow.GetWindow().BeginWindowDrag(operation);
             }
 
-            if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
+            if (fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Alt).value_or(false))
             {
                 SelectionRect::Operation operation = SelectionRect::Operation::NoOp;
                 if (pressed && mouseInside)
                     operation = SelectionRect::Operation::BeginDrag;
                 else if (!pressed && mouseInside)
                     operation = SelectionRect::Operation::EndDrag;
-                fOwner.fSelectionRect.SetSelection(operation,
-                                                   fOwner.SnapToScreenSpaceImagePixels(canvas.GetMousePosition()));
+                fOwner.fSelectionRect.SetSelection(operation, fOwner.SnapToScreenSpaceImagePixels(
+                                                                  fOwner.fWindow.GetCanvasMousePosition()));
                 fOwner.SaveImageSpaceSelection();
             }
         }
@@ -145,11 +142,12 @@ namespace OIV
         const bool rightDown = state->at(static_cast<size_t>(LWS::MouseButton::Right));
 
         fMultiClick.SetMouseDelta(static_cast<int16_t>(delta.x), static_cast<int16_t>(delta.y));
-        if (LWS::Platform::isKeyPressed(LWS::KeyCode::Alt) && fCapture.IsCaptured(LWS::MouseButton::Left))
+        if (fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Alt).value_or(false) &&
+            fCapture.IsCaptured(LWS::MouseButton::Left))
         {
             fOwner.fSelectionRect.SetSelection(SelectionRect::Operation::Drag,
                                                fOwner.SnapToScreenSpaceImagePixels(
-                                                   fOwner.fWindow.GetCanvasWindow().GetMousePosition()));
+                                                   fOwner.fWindow.GetCanvasMousePosition()));
             fOwner.SaveImageSpaceSelection();
         }
         if (fCapture.IsCaptured(LWS::MouseButton::Right) && !fOwner.fContextMenu->IsVisible() && delta != LWS::Point{})
@@ -178,13 +176,13 @@ namespace OIV
         const bool rightCaptured = fCapture.IsCaptured(LWS::MouseButton::Right);
         // Navigation intentionally reacts to every event by sign. High-resolution wheels can therefore trigger
         // multiple navigation commands while moving through one logical detent.
-        if (mouseInside && LWS::Platform::isKeyPressed(LWS::KeyCode::Alt))
+        if (mouseInside && fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Alt).value_or(false))
             fOwner.ExecutePredefinedCommand(steps > 0.0 ? "PreviousSubImage" : "NextSubImage");
-        else if (mouseInside && LWS::Platform::isKeyPressed(LWS::KeyCode::Shift))
+        else if (mouseInside && fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Shift).value_or(false))
             fOwner.ExecutePredefinedCommand(steps > 0.0 ? "PreviousImageInFolder" : "NextImageInFolder");
         else if (rightCaptured || mouseInside)
         {
-            const auto position = canvas.GetMousePosition();
+            const auto position = fOwner.fWindow.GetCanvasMousePosition();
             if (rightCaptured)
                 fOwner.Zoom(steps * ZoomAmountPerWheelStep);
             else
@@ -205,7 +203,7 @@ namespace OIV
             if (fOwner.fSelectionRect.GetOperation() != SelectionRect::Operation::NoOp)
                 fOwner.CancelSelection();
             else
-                fOwner.ToggleFullScreen(LWS::Platform::isKeyPressed(LWS::KeyCode::Alt));
+                fOwner.ToggleFullScreen(fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Alt).value_or(false));
         }
         else if (event.button == LWS::MouseButton::Right && !leftDown)
             fOwner.ExecutePredefinedCommand("PasteImageFromClipboard");

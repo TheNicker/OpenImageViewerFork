@@ -3,6 +3,8 @@
 #include <thread>
 #include <future>
 #include <cassert>
+#include <algorithm>
+#include <cmath>
 
 #include "ViewerApplication.h"
 
@@ -11,6 +13,9 @@
 #include <Functions.h>
 #include <ApiGlobal.h>
 #include <LWS/Platform.hpp>
+#ifdef LWS_HAS_WIN32_BACKEND
+    #include <LWS/Win32/WindowExtensions.hpp>
+#endif
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
@@ -95,44 +100,71 @@ namespace OIV
         }
 
         // initialize the windowing system of the window
+        // The historical 1200x800 native window was calibrated at 125% scaling. LWS uses 96-DPI logical units, so
+        // this client estimate preserves that reference footprint while remaining portable.
+        LWS::LogicalSize initialClientSize{946, 602};
+        if (const auto monitor = fPlatform.GetPrimaryMonitor(); monitor.has_value())
+        {
+            double workWidth  = monitor->workRect.GetWidth();
+            double workHeight = monitor->workRect.GetHeight();
+#ifdef LWS_HAS_WIN32_BACKEND
+            workWidth /= monitor->contentScale.x;
+            workHeight /= monitor->contentScale.y;
+#endif
+            constexpr double edgeMargins = 64.0;
+            const double scale           = std::min({1.0, std::max(workWidth - edgeMargins, 1.0) / initialClientSize.x,
+                                                     std::max(workHeight - edgeMargins, 1.0) / initialClientSize.y});
+            initialClientSize            = {
+                std::max(1, static_cast<int32_t>(std::lround(initialClientSize.x * scale))),
+                std::max(1, static_cast<int32_t>(std::lround(initialClientSize.y * scale))),
+            };
+        }
         const LWS::WindowConfig windowConfig{
-            .size   = {1200, 800},
-            .styles = WindowChromeStyles,
+            .clientSize         = initialClientSize,
+            .styles             = LWS::WindowStyleFlags(WindowChromeStyles),
+            .backgroundColor    = LLUtils::Color(45, 45, 48),
+            .dragAndDropEnabled = fPlatform.Supports(LWS::PlatformFeature::DragAndDrop).value_or(false),
         };
         if (fWindow.Create(windowConfig) != LWS::Result::Success)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to create the main window");
-#ifdef LWS_PLATFORM_WIN32
-        std::ignore = LWS::Win32::SetMenuChar(fWindow, false);
+        std::ignore = fWindow.GetWindow().Center(LWS::CenterTarget::PrimaryMonitor);
+#ifdef LWS_HAS_WIN32_BACKEND
+        std::ignore = LWS::Win32::SetMenuChar(fWindow.GetWindow(), false);
 #endif
         fWindow.ShowStatusBar(false);
-        fWindow.SetDestoryOnClose(false);
-        if (LWS::Platform::supports(LWS::Platform::Feature::DragAndDrop) &&
-            fWindow.EnableDragAndDrop(true) != LWS::Result::Success)
-            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to enable window drag and drop");
-        // Set canvas background the same color as in the renderer for flicker free startup.
-        // TODO: fix resize and disable background erasure of top level windows.
-        fWindow.SetBackgroundColor(LLUtils::Color(45, 45, 48));
-        fWindow.GetCanvasWindow().SetBackgroundColor(LLUtils::Color(45, 45, 48));
+        std::ignore = fWindow.GetCanvasWindow().SetBackgroundColor(LLUtils::Color(45, 45, 48));
 
-        fWindow.SetDoubleClickMode(LWS::DoubleClickMode::Default);
-        AutoScroll::CreateParams params = {&fWindow,
+        AutoScroll::CreateParams params = {&fWindow.GetWindow(),
                                            std::bind(&ViewerApplication::OnScroll, this, std::placeholders::_1)};
         fAutoScroll                     = std::make_unique<AutoScroll>(params);
 
-        std::ignore = fWindow.AddEventListener(
+        auto windowConnection = fWindow.GetWindow().Listen(
             [this](const LWS::AnyEvent& eventData)
-            { return HandleEventCallback([&]() { return HandleMessages(eventData); }); });
-        std::ignore = fWindow.GetCanvasWindow().AddEventListener(
+            {
+                if (std::holds_alternative<LWS::EventWindowDestroyed>(eventData))
+                    fPlatform.RequestQuit();
+                return HandleEventCallback([&]() { return HandleMessages(eventData); }) ? LWS::EventResponse::Handled
+                                                                                        : LWS::EventResponse::Unhandled;
+            });
+        auto canvasConnection = fWindow.GetCanvasWindow().Listen(
             [this](const LWS::AnyEvent& eventData)
-            { return HandleEventCallback([&]() { return HandleClientWindowMessages(eventData); }); });
+            {
+                return HandleEventCallback([&]() { return HandleClientWindowMessages(eventData); })
+                           ? LWS::EventResponse::Handled
+                           : LWS::EventResponse::Unhandled;
+            });
+        if (!windowConnection.has_value() || !canvasConnection.has_value())
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to register window listeners");
+        fWindowConnection = std::move(*windowConnection);
+        fCanvasConnection = std::move(*canvasConnection);
 
         fRefreshOperation.Begin();
 
-        fTimerNoActiveZoom.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fTimerNoActiveZoom.SetTargetWindow(&fWindow.GetWindow());
 
         fTimerNoActiveZoom.SetCallback(MakeSafeCallback([this]() { DelayResamplingCallback(); }));
 
-        fTimerNavigation.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fTimerNavigation.SetTargetWindow(&fWindow.GetWindow());
         fTimerNavigation.SetCallback(MakeSafeCallback(
             [this]()
             {
@@ -152,7 +184,7 @@ namespace OIV
             }));
 
         // TODO: move sequencer initialiaztion to PostInitOperations.
-        fSequencerTimer.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fSequencerTimer.SetTargetWindow(&fWindow.GetWindow());
         fSequencerTimer.SetCallback(MakeSafeCallback(
             [this]()
             {
@@ -167,7 +199,7 @@ namespace OIV
                 RefreshImage();
             }));
 
-        fMessageManager = std::make_unique<MessageManager>(fWindow.GetHandle(), &fLabelManager, 5,
+        fMessageManager = std::make_unique<MessageManager>(fWindow.GetWindow(), &fLabelManager, 5,
                                                            [&]() -> void { fRefreshOperation.Queue(); });
 
         InitializeRenderer();
@@ -186,7 +218,7 @@ namespace OIV
 
         // If there is no initial file or the file has failed to load, show the window now, otherwise show the window
         // after the image has rendered completely at the method FinalizeImageLoad.
-        fWindow.SetVisible(!isInitialFileLoadedSuccesfuly);
+        std::ignore = fWindow.GetWindow().SetVisible(!isInitialFileLoadedSuccesfuly);
 
         // If initial file is provided but doesn't exist
         if (isInitialFileProvided && !isInitialFileExists)
@@ -227,10 +259,10 @@ namespace OIV
     {
         mLogFile.Register();
 
-        fTimerTopMostRetention.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fTimerTopMostRetention.SetTargetWindow(&fWindow.GetWindow());
         fTimerTopMostRetention.SetCallback(MakeSafeCallback([this]() { ProcessTopMost(); }));
 
-        fTimerSlideShow.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fTimerSlideShow.SetTargetWindow(&fWindow.GetWindow());
         fTimerSlideShow.SetCallback(MakeSafeCallback(
             [this]()
             {
@@ -241,15 +273,15 @@ namespace OIV
 
                 const auto& fileList = fBrowseSessionController->GetFolderFileList();
                 bool foundFile       = JumpFiles(1) ||
-                                 (fSlideshowPolicy.ShouldWrap(fileList.GetCurrentIndex(), fileList.GetSize()) &&
-                                  JumpFiles(FolderFileList::IndexStart));
+                                       (fSlideshowPolicy.ShouldWrap(fileList.GetCurrentIndex(), fileList.GetSize()) &&
+                                        JumpFiles(FolderFileList::IndexStart));
 
                 SetSlideShowEnabled(foundFile);
             }));
 
         fDoubleTap.callback = [this]()
         {
-            fWindow.SetAlwaysOnTop(true);
+            std::ignore     = fWindow.GetWindow().SetAlwaysOnTop(true);
             fTopMostCounter = 3;
             SetTopMostUserMesage();
             fTimerTopMostRetention.SetInterval(1000);
@@ -287,18 +319,18 @@ namespace OIV
             {
                 if (!fIsShuttingDown)
                 {
-                    fEventSync.AddData(static_cast<std::underlying_type_t<InterThreadMessages>>(
-                                           InterThreadMessages::FileIndexResidencyReady),
-                                       FileIndexResidencyReadyData{fileName, image});
+                    QueueUiCompletion(static_cast<std::underlying_type_t<InterThreadMessages>>(
+                                          InterThreadMessages::FileIndexResidencyReady),
+                                      FileIndexResidencyReadyData{fileName, image});
                 }
             },
             [this](const BrowseSessionController::BrowseCandidateCompletion& completion)
             {
                 if (!fIsShuttingDown)
                 {
-                    fEventSync.AddData(static_cast<std::underlying_type_t<InterThreadMessages>>(
-                                           InterThreadMessages::CandidateResidencyReady),
-                                       CandidateResidencyReadyData{completion});
+                    QueueUiCompletion(static_cast<std::underlying_type_t<InterThreadMessages>>(
+                                          InterThreadMessages::CandidateResidencyReady),
+                                      CandidateResidencyReadyData{completion});
                 }
             });
         fImageOpenController->SetBrowseSessionController(fBrowseSessionController.get());
@@ -313,11 +345,11 @@ namespace OIV
             std::bind(&ViewerApplication::OnImageSelectionChanged, this, std::placeholders::_1));
 
         // renderer took over on the window, no need to erase background.
-        fWindow.GetCanvasWindow().SetEraseBackground(false);
+        std::ignore = fWindow.GetCanvasWindow().SetEraseBackground(false);
 
-        fContextMenuTimer.SetTargetWindow(fWindow.GetHandle());
+        std::ignore = fContextMenuTimer.SetTargetWindow(&fWindow.GetWindow());
         fContextMenuTimer.SetCallback(MakeSafeCallback([this]() { OnContextMenuTimer(); }));
-        fContextMenu = std::make_unique<ContextMenu<MenuItemData>>(fWindow.GetHandle());
+        fContextMenu = std::make_unique<ContextMenu<MenuItemData>>(fWindow.GetWindow());
 
         fContextMenu->AddItem(LLUTILS_TEXT("Open"), MenuItemData{"cmd_open_file", ""});
         fContextMenu->AddItem(LLUTILS_TEXT("Open containing folder"),
@@ -335,7 +367,7 @@ namespace OIV
 
         InitializeNotificationIcons();
 
-        fNotificationContextMenu = std::make_unique<ContextMenu<int>>(fWindow.GetHandle());
+        fNotificationContextMenu = std::make_unique<ContextMenu<int>>(fWindow.GetWindow());
         fNotificationContextMenu->AddItem(LLUTILS_TEXT("Quit"), int{});
 
         InitializeRawInput();
@@ -425,14 +457,15 @@ namespace OIV
 
         PointF64 canvasCenter;
 
-        if (fWindow.GetFullScreenState() != LWS::FullScreenState::MultiScreen) [[likely]]
+        if (fWindow.GetWindow().GetWindowMode() != LWS::WindowMode::FullscreenAllMonitors) [[likely]]
         {
-            canvasCenter = PointF64(fWindow.GetCanvasSize()) / 2.0;
+            const LWS::PixelSize size = fWindow.GetCanvasPixelSize();
+            canvasCenter              = PointF64(size.x, size.y) / 2.0;
         }
         else [[unlikely]]
         {
-            const auto primaryMonitor   = LWS::Platform::getPrimaryMonitor(false).monitorRect;
-            const auto boundingArea     = LWS::Platform::getBoundingMonitorArea();
+            const auto primaryMonitor   = fPlatform.GetPrimaryMonitor(false)->monitorRect;
+            const auto boundingArea     = *fPlatform.GetBoundingMonitorArea();
             const auto primaryMonitorP0 = primaryMonitor.GetCorner(TopLeft);
             const auto boundingAreaP0   = boundingArea.GetCorner(TopLeft);
 
@@ -455,7 +488,8 @@ namespace OIV
     LLUtils::PointF64 ViewerApplication::ResolveOffset(const LLUtils::PointF64& point)
     {
         using namespace LLUtils;
-        return ViewTransformController::ResolveOffset(point, static_cast<PointF64>(fWindow.GetCanvasSize()),
+        const LWS::PixelSize size = fWindow.GetCanvasPixelSize();
+        return ViewTransformController::ResolveOffset(point, PointF64(size.x, size.y),
                                                       GetImageSize(ImageSizeType::Visible), fImageMargins);
     }
 

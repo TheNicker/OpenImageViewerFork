@@ -12,7 +12,7 @@
 
 namespace OIV
 {
-    class MainWindow : public LWS::Window
+    class MainWindow
     {
       public:
 
@@ -32,16 +32,19 @@ namespace OIV
             Count
         };
 
-        MainWindow();
-        ~MainWindow() override;
+        explicit MainWindow(LWS::PlatformContext& platform);
+        ~MainWindow();
+
+        [[nodiscard]] LWS::Window& GetWindow() { return fWindow; }
+        [[nodiscard]] const LWS::Window& GetWindow() const { return fWindow; }
 
         [[nodiscard]] LWS::Result Create(const LWS::WindowConfig& config = {});
 
         [[nodiscard]] bool GetShowImageControl() const;
         [[nodiscard]] bool GetShowStatusBar() const;
-        [[nodiscard]] LWS::Size GetCanvasSize() const;
-        [[nodiscard]] LWS::Handle GetCanvasHandle() const;
-        [[nodiscard]] LWS::Handle GetNativeHandle() const;
+        [[nodiscard]] LWS::PixelSize GetCanvasPixelSize() const;
+        [[nodiscard]] LWS::Point GetCanvasMousePosition() const;
+        [[nodiscard]] LWS::Point GetWindowMousePosition() const;
 
         ImageControl& GetImageControl();
         void SetCursorType(CursorType type);
@@ -53,32 +56,34 @@ namespace OIV
         void SetStatusBarText(LLUtils::native_string_type message, int part, int type);
         void SetIsTrayWindow(bool isTrayWindow);
         static bool GetIsTrayWindow(LWS::Handle windowHandle);
-        void SetDestoryOnClose(bool destroyOnClose);
-        void SetForground();
-        void SetPosition(int32_t x, int32_t y);
-        void SetSize(uint32_t width, uint32_t height);
-        void SetWindowDisplayState(LWS::WindowDisplayState state);
-        [[nodiscard]] LWS::WindowDisplayState GetWindowDisplayState() const;
-        [[nodiscard]] bool IsMouseCursorInClientRect() const;
 
       private:
 
         struct NativeState;
 
         bool HandleWindowEvent(const LWS::AnyEvent& eventData);
-        void OnCreate();
+        [[nodiscard]] LWS::Result OnCreate();
+        [[nodiscard]] int32_t GetImageControlClientWidth(int32_t layoutWidth) const;
+        void PrepareImageControlLayout();
         void SetApplicationIcon();
-        void UpdateNativeStatusBar(LWS::Size& canvasSize);
+        void UpdateNativeStatusBar(LWS::LogicalSize& canvasSize);
         [[nodiscard]] bool UseMainWindowAsCanvas() const;
 
+        LWS::Window fWindow;
         LWS::Window fCanvasWindow;
         bool fShowStatusBar           = true;
         bool fShowImageControl        = false;
         CursorType fCurrentCursorType = CursorType::SystemDefault;
-        std::array<LWS::Cursor, static_cast<size_t>(CursorType::Count)> fCursors{};
-        bool fCursorsInitialized    = false;
+        std::array<LWS::Cursor, static_cast<size_t>(CursorType::Count) - 1> fCursors{
+            LWS::Cursor::FromShape(LWS::CursorShape::Arrow),    LWS::Cursor::FromShape(LWS::CursorShape::SizeEW),
+            LWS::Cursor::FromShape(LWS::CursorShape::SizeNESW), LWS::Cursor::FromShape(LWS::CursorShape::SizeNS),
+            LWS::Cursor::FromShape(LWS::CursorShape::SizeNWSE), LWS::Cursor::FromShape(LWS::CursorShape::SizeEW),
+            LWS::Cursor::FromShape(LWS::CursorShape::SizeNESW), LWS::Cursor::FromShape(LWS::CursorShape::SizeNS),
+            LWS::Cursor::FromShape(LWS::CursorShape::SizeNWSE), LWS::Cursor::FromShape(LWS::CursorShape::SizeAll),
+        };
         bool fUseMainWindowAsCanvas = false;
         ImageControl fImageControl;
         std::unique_ptr<NativeState> fNativeState;
+        LWS::EventConnection fEventConnection;
     };
 }  // namespace OIV

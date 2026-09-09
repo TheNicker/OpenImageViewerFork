@@ -39,7 +39,7 @@ namespace OIV
         if (fTopMostCounter == 0)
         {
             fTimerTopMostRetention.SetInterval(0);
-            fWindow.SetAlwaysOnTop(false);
+            std::ignore = fWindow.GetWindow().SetAlwaysOnTop(false);
             fMessageManager->RemoveGroup(static_cast<GroupID>(UserMessageGroups::WindowOnTop));
         }
         else
@@ -56,7 +56,7 @@ namespace OIV
                               IMCodec::PluginTraverseMode::AnyPlugin | IMCodec::PluginTraverseMode::AnyFileType))
             return false;
 
-        fWindow.SetForground();
+        std::ignore = fWindow.GetWindow().RequestActivation();
         return true;
     }
 

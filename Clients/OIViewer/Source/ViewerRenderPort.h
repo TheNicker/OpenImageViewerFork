@@ -2,8 +2,11 @@
 
 #include "OIVCommands.h"
 
+#include <LWS/WindowTypes.hpp>
+
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace OIV
 {
@@ -13,14 +16,15 @@ namespace OIV
 
         virtual ~IViewerRenderPort() = default;
 
-        virtual void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr)         = 0;
+        virtual void Initialize(std::size_t canvasHandle, const LWS::ClientAreaSize& size,
+                                void* nativeDisplay = nullptr)                                   = 0;
         virtual void ResumePresentation()                                                        = 0;
         virtual ResultCode Refresh()                                                             = 0;
         virtual void SetSelectionRect(const LLUtils::RectI32& rect)                              = 0;
         virtual void ClearSelectionRect()                                                        = 0;
         virtual ResultCode SetColorExposure(const OIV_CMD_ColorExposure_Request& exposure)       = 0;
         virtual ResultCode SetTexelGrid(const CmdRequestTexelGrid& grid)                         = 0;
-        virtual ResultCode SetClientSize(uint16_t width, uint16_t height)                        = 0;
+        virtual ResultCode SetViewportSize(const LWS::ClientAreaSize& size)                      = 0;
         virtual ResultCode RegisterCallbacks(const OIV_CMD_RegisterCallbacks_Request& callbacks) = 0;
     };
 
@@ -39,9 +43,11 @@ namespace OIV
         {
         }
 
-        void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr) override
+        void Initialize(std::size_t canvasHandle, const LWS::ClientAreaSize& size,
+                        void* nativeDisplay = nullptr) override
         {
             OIVCommands::Init(canvasHandle, nativeDisplay);
+            std::ignore = SetViewportSize(size);
         }
 
         ResultCode Refresh() override
@@ -80,10 +86,16 @@ namespace OIV
             return OIVCommands::ExecuteCommand(CE_TexelGrid, &request, &OIVCommands::NullCommand);
         }
 
-        ResultCode SetClientSize(uint16_t width, uint16_t height) override
+        ResultCode SetViewportSize(const LWS::ClientAreaSize& size) override
         {
-            CmdSetClientSizeRequest request{width, height};
-            return OIVCommands::ExecuteCommand(CMD_SetClientSize, &request, &OIVCommands::NullCommand);
+            if (fViewportSize == size)
+                return RC_Success;
+            CmdSetClientSizeRequest request{static_cast<uint16_t>(size.pixels.x), static_cast<uint16_t>(size.pixels.y)};
+            const ResultCode result = OIVCommands::ExecuteCommand(CMD_SetClientSize, &request,
+                                                                  &OIVCommands::NullCommand);
+            if (result == RC_Success)
+                fViewportSize = size;
+            return result;
         }
 
         ResultCode RegisterCallbacks(const OIV_CMD_RegisterCallbacks_Request& callbacks) override
@@ -96,5 +108,6 @@ namespace OIV
 
         bool fPresentationReady;
         bool fRefreshPending{};
+        std::optional<LWS::ClientAreaSize> fViewportSize;
     };
 }  // namespace OIV

@@ -1,17 +1,22 @@
 #include "MonitorProvider.h"
 
+#include <LWS/Window.hpp>
+
 #include <Windows.h>
+
+#include <LWS/Win32/WindowExtensions.hpp>
 
 namespace OIV
 {
-    void MonitorProvider::UpdateFromWindowHandle(LWS::Handle windowHandle)
+    void MonitorProvider::UpdateFromWindow(LWS::Window& window)
     {
-        const HMONITOR monitor          = MonitorFromWindow(reinterpret_cast<HWND>(windowHandle), 0);
-        const LWS::Handle monitorHandle = reinterpret_cast<LWS::Handle>(monitor);
+        const HMONITOR monitor        = MonitorFromWindow(*LWS::Win32::GetHwnd(window), 0);
+        const uintptr_t monitorHandle = reinterpret_cast<uintptr_t>(monitor);
         if (monitorHandle != fMonitorDesc.handle)
         {
-            LWS::Platform::refreshMonitors();
-            fMonitorDesc = LWS::Platform::getMonitorInfo(monitorHandle);
+            auto& platform = window.GetPlatformContext();
+            std::ignore    = platform.RefreshMonitors();
+            fMonitorDesc   = *platform.GetMonitorInfo(monitorHandle);
             const EventManager::MonitorChangeEventParams args{.monitorDesc = fMonitorDesc};
             EventManager::GetSingleton().MonitorChange.Raise(args);
         }

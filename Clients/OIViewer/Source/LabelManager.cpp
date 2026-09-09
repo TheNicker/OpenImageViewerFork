@@ -1,21 +1,28 @@
 #include "LabelManager.h"
+
+#include <cmath>
 #include "EventManager.h"
 #include "FreeTypeWrapper/FreeTypeConnector.h"
 
 namespace OIV
 {
 
-    
     LabelManager::LabelManager(FreeType::FreeTypeConnector* freeType)
     {
-        EventManager::GetSingleton().MonitorChange.Add(std::bind(&LabelManager::OnMonitorChange, this,std::placeholders::_1));
+        EventManager::GetSingleton().MonitorChange.Add(
+            std::bind(&LabelManager::OnMonitorChange, this, std::placeholders::_1));
         fFreeType = freeType;
     }
 
     void LabelManager::OnMonitorChange(const EventManager::MonitorChangeEventParams& params)
     {
-        std::get<0>(fDPI) = params.monitorDesc.dpiX;
-        std::get<1>(fDPI) = params.monitorDesc.dpiY;
+        SetContentScale(params.monitorDesc.contentScale);
+    }
+
+    void LabelManager::SetContentScale(const LWS::ContentScale& scale)
+    {
+        std::get<0>(fDPI) = static_cast<uint16_t>(std::lround(scale.x * 96.0));
+        std::get<1>(fDPI) = static_cast<uint16_t>(std::lround(scale.y * 96.0));
         for (auto& [name, text] : fTextLabels)
             text->SetDPI(std::get<0>(fDPI), std::get<1>(fDPI));
     }
@@ -48,7 +55,6 @@ namespace OIV
         return it->second.get();
     }
 
-
     OIVTextImageUniquePtr LabelManager::CreateTemplatedText()
     {
         OIVTextImageUniquePtr text = std::make_unique<OIVTextImage>(fFreeType);
@@ -64,9 +70,9 @@ namespace OIV
         text->SetFontPath(sFontPath);
         text->SetFontSize(12);
         text->SetOutlineWidth(2);
-        //text->SetRenderMode(OIV_PROP_CreateText_Mode::CTM_AntiAliased);
+        // text->SetRenderMode(OIV_PROP_CreateText_Mode::CTM_AntiAliased);
         text->SetBackgroundColor(LLUtils::Color(0, 0, 0, 180));
-        
+
         return text;
     }
-}
+}  // namespace OIV

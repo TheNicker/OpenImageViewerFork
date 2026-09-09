@@ -11,6 +11,11 @@
 #include <Functions.h>
 #include <ApiGlobal.h>
 #include <LWS/Platform.hpp>
+#ifdef LWS_HAS_WIN32_BACKEND
+    #include <LWS/Win32/WindowExtensions.hpp>
+#elif defined(LWS_HAS_WAYLAND_BACKEND)
+    #include <LWS/Wayland/WindowExtensions.hpp>
+#endif
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
@@ -169,27 +174,27 @@ namespace OIV
         };
     }
 
-    ViewerApplication::ViewerApplication()
-        : fRefreshTimer(
-              [this]()
-              {
-                  HandleEventCallback(
-                      [this]()
-                      {
-                          OnRefreshTimer();
-                          return true;
-                      });
-              }),
-          fRefreshOperation(
-              [this]()
-              {
-                  HandleEventCallback(
-                      [this]()
-                      {
-                          OnRefresh();
-                          return true;
-                      });
-              }),
+    ViewerApplication::ViewerApplication(LWS::PlatformContext& platform)
+        : fPlatform(platform), fRefreshTimer(platform,
+                                             [this]()
+                                             {
+                                                 HandleEventCallback(
+                                                     [this]()
+                                                     {
+                                                         OnRefreshTimer();
+                                                         return true;
+                                                     });
+                                             }),
+          fWindow(platform), fRefreshOperation(
+                                 [this]()
+                                 {
+                                     HandleEventCallback(
+                                         [this]()
+                                         {
+                                             OnRefresh();
+                                             return true;
+                                         });
+                                 }),
           fPreserveImageSpaceSelection(
               [this]()
               {
@@ -220,10 +225,12 @@ namespace OIV
                                         return true;
                                     });
                             }),
+          fTimerTopMostRetention(platform), fTimerSlideShow(platform), fClipboardHelper(platform),
+          fTimerNoActiveZoom(platform), fTimerNavigation(platform),
           fFreeType(std::make_unique<FreeType::FreeTypeConnector>()), fLabelManager(fFreeType.get()),
           fImageOpenController(
               std::make_unique<ImageOpenController>(std::make_unique<OIVImageFileLoader>(fImageLoader))),
-          fEventSync(std::bind(&ViewerApplication::OnMessageFromBackgroundThread, this, std::placeholders::_1))
+          fContextMenuTimer(platform), fSequencerTimer(platform)
 
     //, fFileCache(&fImageLoader, std::bind(&ViewerApplication::OnImageReady, this, std::placeholders::_1))
 
@@ -274,20 +281,16 @@ namespace OIV
         fRefreshRateTimes1000 = params.monitorDesc.displayFrequency == 59 ? 59940
                                                                           : params.monitorDesc.displayFrequency * 1000;
 
-        const LLUtils::PointF64 BaseDPI{96.0, 96.0};
-
         // DPI adjustment. The mouse generates movement events as district units.
         // To keep movement speed constant across several monitors in terms of distance,
         // DPI must be taken care into consideration.
-        fDPIadjustmentFactor = LLUtils::PointF64{static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.dpiX),
-                                                 static_cast<LLUtils::PointF64::point_type>(params.monitorDesc.dpiY)} /
-                               BaseDPI;
+        fDPIadjustmentFactor = {params.monitorDesc.contentScale.x, params.monitorDesc.contentScale.y};
     }
 
     void ViewerApplication::ProbeForMonitorChange()
     {
         if (fIsFirstFrameDisplayed == true)
-            fMonitorProvider.UpdateFromWindowHandle(fWindow.GetHandle());
+            fMonitorProvider.UpdateFromWindow(fWindow.GetWindow());
     }
 
     void ViewerApplication::PerformRefresh()
@@ -343,7 +346,11 @@ namespace OIV
 
     LWS::Handle ViewerApplication::GetWindowHandle() const
     {
-        return fWindow.GetHandle();
+#ifdef LWS_HAS_WIN32_BACKEND
+        return reinterpret_cast<LWS::Handle>(*LWS::Win32::GetHwnd(fWindow.GetWindow()));
+#else
+        return reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(fWindow.GetWindow()));
+#endif
     }
 
     void ViewerApplication::UpdateTitle()
@@ -408,13 +415,13 @@ namespace OIV
             else
                 title = ViewerPresentationPolicy::FormatNonFileTitlePrefix(imageSource);
         }
-        fWindow.SetTitle(ViewerPresentationPolicy::FormatTitle(title, cachedVersionString));
+        std::ignore = fWindow.GetWindow().SetTitle(ViewerPresentationPolicy::FormatTitle(title, cachedVersionString));
     }
 
     void ViewerApplication::OnContextMenuTimer()
     {
         fContextMenuTimer.SetInterval(0);
-        auto pos        = LWS::Platform::getMousePosition();
+        auto pos        = fPlatform.GetMousePosition().value_or(LWS::Point{});
         auto chosenItem = fContextMenu->Show(pos.x - 16, pos.y + -16, AlignmentHorizontal::Center,
                                              AlignmentVertical::Center);
 
@@ -511,16 +518,16 @@ namespace OIV
         switch (args.action)
         {
             case LWS::NotificationIconGroup::NotificationIconAction::Select:
-                if (fWindow.GetVisible() == false ||
-                    fWindow.GetWindowDisplayState() == LWS::WindowDisplayState::Minimized)
+                if (!fWindow.GetWindow().GetVisible() ||
+                    fWindow.GetWindow().GetShowState() == LWS::WindowShowState::Minimized)
                 {
-                    fWindow.SetVisible(true);
-                    fWindow.SetWindowDisplayState(LWS::WindowDisplayState::Restored);
-                    fWindow.SetForground();
+                    std::ignore = fWindow.GetWindow().SetVisible(true);
+                    std::ignore = fWindow.GetWindow().RequestShowState(LWS::WindowShowState::Restored);
+                    std::ignore = fWindow.GetWindow().RequestActivation();
                 }
                 else
                 {
-                    fWindow.SetVisible(false);
+                    std::ignore = fWindow.GetWindow().SetVisible(false);
                 }
                 break;
             case LWS::NotificationIconGroup::NotificationIconAction::ContextMenu:
@@ -528,7 +535,7 @@ namespace OIV
                 auto rect       = GetNotificationIconRect(fNotificationIconID);
                 auto bottomLeft = ShellIntegrationHelper::TrayContextMenuPosition(rect);
 
-                fWindow.SetForground();
+                std::ignore     = fWindow.GetWindow().RequestActivation();
                 auto chosenItem = fNotificationContextMenu->Show(bottomLeft.x, bottomLeft.y, AlignmentHorizontal::Right,
                                                                  AlignmentVertical::Bottom);
                 if (chosenItem != nullptr)
@@ -598,8 +605,9 @@ namespace OIV
         welcomeMessage->Create();
         // get the text size to reposition on screen
         using namespace LLUtils;
-        PointI32 clientSize = fWindow.GetCanvasSize();
-        PointI32 center     = (clientSize - static_cast<PointI32>(welcomeMessage->GetImage()->GetDimensions())) / 2;
+        const LWS::PixelSize canvasSize = fWindow.GetCanvasPixelSize();
+        PointI32 clientSize{canvasSize.x, canvasSize.y};
+        PointI32 center = (clientSize - static_cast<PointI32>(welcomeMessage->GetImage()->GetDimensions())) / 2;
         welcomeMessage->SetPosition(static_cast<PointF64>(center));
 
         if (welcomeMessage->IsDirty())

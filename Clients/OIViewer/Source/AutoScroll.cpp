@@ -2,7 +2,11 @@
 
 namespace OIV
 {
-    AutoScroll::AutoScroll(const CreateParams& createParams) : fCreateParams(createParams) {}
+    AutoScroll::AutoScroll(const CreateParams& createParams)
+        : fTimer(createParams.window->GetPlatformContext(), std::bind(&AutoScroll::OnScroll, this)),
+          fCreateParams(createParams)
+    {
+    }
 
     void AutoScroll::PerformAutoScroll()
     {

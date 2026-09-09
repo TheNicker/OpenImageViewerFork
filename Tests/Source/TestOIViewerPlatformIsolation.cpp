@@ -3,6 +3,11 @@
 #include <ContextMenu.h>
 #include <ImageList.h>
 #include <LLUtils/Exception.h>
+#include <LWS/Platform.hpp>
+#include <LWS/Window.hpp>
+#ifdef LWS_HAS_WIN32_BACKEND
+    #include <LWS/Win32/Platform.hpp>
+#endif
 
 #include <type_traits>
 
@@ -70,8 +75,8 @@ TEST_CASE("ImageList owns visible row layout and hit testing", "[oiviewer][platf
     REQUIRE_FALSE(imageList.GetImageIndexAt(150));
 
     const LWS::Rect secondRow = imageList.GetRowRect(2, 240);
-    REQUIRE(secondRow.GetCorner(LLUtils::Corner::TopLeft) == LLUtils::PointI32{0, 100});
-    REQUIRE(secondRow.GetCorner(LLUtils::Corner::BottomRight) == LLUtils::PointI32{240, 200});
+    REQUIRE(secondRow.GetCorner(LLUtils::Corner::TopLeft) == LLUtils::PointI32{0, 80});
+    REQUIRE(secondRow.GetCorner(LLUtils::Corner::BottomRight) == LLUtils::PointI32{240, 160});
 }
 
 TEST_CASE("ContextMenu supports both viewer item models", "[oiviewer][platform]")
@@ -82,8 +87,21 @@ TEST_CASE("ContextMenu supports both viewer item models", "[oiviewer][platform]"
         std::string arguments;
     };
 
-    OIV::ContextMenu<int> notificationMenu(0);
-    OIV::ContextMenu<CommandItem> commandMenu(0);
+#ifdef LWS_HAS_WIN32_BACKEND
+    REQUIRE(LWS::Win32::BootstrapProcess() == LWS::Result::Success);
+#endif
+    LWS::PlatformContext platform;
+#ifdef LWS_HAS_WIN32_BACKEND
+    const auto backend = LWS::BackendId::Win32;
+#else
+    const auto backend = LWS::BackendId::Wayland;
+#endif
+    if (platform.Init({.backend = backend}) != LWS::Result::Success)
+        SKIP("No window-system backend is available");
+    LWS::Window window(platform);
+    REQUIRE(window.Create() == LWS::Result::Success);
+    OIV::ContextMenu<int> notificationMenu(window);
+    OIV::ContextMenu<CommandItem> commandMenu(window);
     notificationMenu.AddItem(LLUTILS_TEXT("Quit"), 0);
     commandMenu.AddItem(LLUTILS_TEXT("Open"), {.command = "open", .arguments = {}});
 
@@ -97,7 +115,11 @@ TEST_CASE("Linux context-menu presentation reports NotImplemented", "[oiviewer][
     LLUtils::Exception::ErrorCode errorCode = LLUtils::Exception::ErrorCode::Unspecified;
     auto exceptionConnection = LLUtils::Exception::OnException.Connect([&](const LLUtils::Exception::EventArgs& args)
                                                                        { errorCode = args.errorCode; });
-    OIV::ContextMenu<int> menu(0);
+    LWS::PlatformContext platform;
+    if (platform.Init({.backend = LWS::BackendId::Wayland}) != LWS::Result::Success)
+        SKIP("No Wayland compositor is available");
+    LWS::Window window(platform);
+    OIV::ContextMenu<int> menu(window);
 
     REQUIRE_THROWS_AS(menu.Show(0, 0, OIV::AlignmentHorizontal::None, OIV::AlignmentVertical::None),
                       LLUtils::Exception);

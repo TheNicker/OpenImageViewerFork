@@ -2,6 +2,8 @@
 
 #include <Windows.h>
 
+#include <LWS/Win32/WindowExtensions.hpp>
+
 #include <algorithm>
 
 namespace OIV
@@ -11,7 +13,7 @@ namespace OIV
         explicit NativeState(int lineWidth)
         {
             LOGFONT fontDescription{};
-            fontDescription.lfHeight  = 20;
+            fontDescription.lfHeight  = 16;
             fontDescription.lfWeight  = FW_NORMAL;
             fontDescription.lfQuality = CLEARTYPE_QUALITY;
             wcscpy_s(fontDescription.lfFaceName, LLUTILS_TEXT("Segoe UI"));
@@ -50,89 +52,94 @@ namespace OIV
         HPEN verticalPen      = nullptr;
         HPEN verticalPen2     = nullptr;
 
-        void Draw(HDC deviceContext, const ImageList& imageList, LWS::Size size) const;
+        void Draw(HDC deviceContext, const ImageList& imageList, const LWS::ClientAreaSize& size) const;
     };
 
-    ImageControl::ImageControl()
+    ImageControl::ImageControl(LWS::PlatformContext& platform) : fWindow(platform)
     {
         InitializePlatformRendering();
         InitializeEvents();
     }
 
-    ImageControl::~ImageControl()
-    {
-        std::ignore = LWS::Win32::SetPlatformCallback(*this, {});
-    }
+    ImageControl::~ImageControl() = default;
 
     void ImageControl::InitializePlatformRendering()
     {
-        fNativeState = std::make_unique<NativeState>(fImageList.GetLineWidth());
-        std::ignore  = LWS::Win32::SetPlatformCallback(
-            *this,
-            [this](const LWS::Win32::PlatformEvent& event) -> std::optional<LRESULT>
-            {
-                if (const auto* paint = std::get_if<LWS::Win32::PaintEvent>(&event))
-                {
-                    fNativeState->Draw(paint->deviceContext, fImageList, GetClientSize());
-                    return 0;
-                }
-                if (const auto* scroll = std::get_if<LWS::Win32::VerticalScrollEvent>(&event))
-                {
-                    const int oldPos = fImageList.GetScrollPosition();
-                    int newPos       = oldPos;
-                    switch (scroll->action)
-                    {
-                        case LWS::Win32::VerticalScrollAction::PageDown:
-                            ++newPos;
-                            break;
-                        case LWS::Win32::VerticalScrollAction::PageUp:
-                            --newPos;
-                            break;
-                        case LWS::Win32::VerticalScrollAction::ThumbTrack:
-                        case LWS::Win32::VerticalScrollAction::ThumbPosition:
-                            newPos = scroll->position;
-                            break;
-                    }
+        fNativeState    = std::make_unique<NativeState>(fImageList.GetLineWidth());
+        auto connection = LWS::Win32::Listen(fWindow,
+                                             [this](const LWS::Win32::PlatformEvent& event) -> std::optional<LRESULT>
+                                             {
+                                                 if (const auto* paint = std::get_if<LWS::Win32::PaintEvent>(&event))
+                                                 {
+                                                     const auto size = fWindow.GetClientAreaSize();
+                                                     if (size.has_value())
+                                                         fNativeState->Draw(paint->deviceContext, fImageList, *size);
+                                                     return 0;
+                                                 }
+                                                 if (const auto* scroll = std::get_if<LWS::Win32::VerticalScrollEvent>(
+                                                         &event))
+                                                 {
+                                                     const int oldPos = fImageList.GetScrollPosition();
+                                                     int newPos       = oldPos;
+                                                     switch (scroll->action)
+                                                     {
+                                                         case LWS::Win32::VerticalScrollAction::PageDown:
+                                                             ++newPos;
+                                                             break;
+                                                         case LWS::Win32::VerticalScrollAction::PageUp:
+                                                             --newPos;
+                                                             break;
+                                                         case LWS::Win32::VerticalScrollAction::ThumbTrack:
+                                                         case LWS::Win32::VerticalScrollAction::ThumbPosition:
+                                                             newPos = scroll->position;
+                                                             break;
+                                                     }
 
-                    if (newPos != oldPos)
-                        SetImagePos(newPos);
-                    return 0;
-                }
-                return std::nullopt;
-            });
+                                                     if (newPos != oldPos)
+                                                         SetImagePos(newPos);
+                                                     return 0;
+                                                 }
+                                                 return std::nullopt;
+                                             });
+        if (connection.has_value())
+            fPlatformConnection = std::move(*connection);
     }
 
     void ImageControl::RefreshScrollInfo()
     {
-        const HWND window = reinterpret_cast<HWND>(GetHandle());
-        fImageList.SetViewportHeight(GetClientSize().y);
+        const auto window = LWS::Win32::GetHwnd(fWindow);
+        if (!window.has_value())
+            return;
+        fImageList.SetViewportHeight(fWindow.GetClientSize().y);
         const size_t deltaElements = fImageList.GetNumberOfElements() - fImageList.GetNumberOfDisplayedElements();
         SCROLLINFO info{};
         info.cbSize = sizeof(info);
-        info.fMask  = SIF_ALL;
+        info.fMask  = SIF_ALL | SIF_DISABLENOSCROLL;
         info.nMin   = 0;
         info.nMax   = static_cast<int>(deltaElements);
         info.nPage  = 1;
         info.nPos   = fImageList.GetScrollPosition();
-        SetScrollInfo(window, SB_VERT, &info, TRUE);
+        SetScrollInfo(*window, SB_VERT, &info, TRUE);
         RequestRepaint();
     }
 
     void ImageControl::RequestRepaint()
     {
-        const HWND window = reinterpret_cast<HWND>(GetHandle());
-        if (window != nullptr)
-            InvalidateRect(window, nullptr, TRUE);
+        const auto window = LWS::Win32::GetHwnd(fWindow);
+        if (window.has_value())
+            InvalidateRect(*window, nullptr, TRUE);
     }
 
     void ImageControl::UpdateScrollPosition()
     {
-        SetScrollPos(reinterpret_cast<HWND>(GetHandle()), SB_VERT, fImageList.GetScrollPosition(), TRUE);
+        const auto window = LWS::Win32::GetHwnd(fWindow);
+        if (window.has_value())
+            SetScrollPos(*window, SB_VERT, fImageList.GetScrollPosition(), TRUE);
     }
 
     std::intptr_t ImageControl::SendMessage(std::uint32_t message, std::uintptr_t wParam, std::intptr_t lParam)
     {
-        return ::SendMessage(reinterpret_cast<HWND>(GetHandle()), message, wParam, lParam);
+        return ::SendMessage(*LWS::Win32::GetHwnd(fWindow), message, wParam, lParam);
     }
 
     bool ImageControl::HandleWindowEvent(const LWS::AnyEvent& eventData)
@@ -149,7 +156,7 @@ namespace OIV
             fImageList.Scroll(wheel->delta < 0 ? 1 : -1);
             return true;
         }
-        if (std::holds_alternative<LWS::EventResize>(eventData))
+        if (std::holds_alternative<LWS::EventClientAreaSizeChanged>(eventData))
         {
             RefreshScrollInfo();
             return true;
@@ -157,14 +164,21 @@ namespace OIV
         return false;
     }
 
-    void ImageControl::NativeState::Draw(HDC deviceContext, const ImageList& imageList, LWS::Size size) const
+    void ImageControl::NativeState::Draw(HDC deviceContext, const ImageList& imageList,
+                                         const LWS::ClientAreaSize& clientArea) const
     {
+        const LWS::LogicalSize size = clientArea.logical;
         if (deviceContext == nullptr || size.x <= 0 || size.y <= 0)
             return;
 
-        constexpr int imageDestWidth  = 64;
-        constexpr int imageDestHeight = 64;
-        constexpr int imagePosition   = 30;
+        const int savedState = SaveDC(deviceContext);
+        SetMapMode(deviceContext, MM_ANISOTROPIC);
+        SetWindowExtEx(deviceContext, size.x, size.y, nullptr);
+        SetViewportExtEx(deviceContext, clientArea.pixels.x, clientArea.pixels.y, nullptr);
+
+        constexpr int imageDestWidth  = 51;
+        constexpr int imageDestHeight = 51;
+        constexpr int imagePosition   = 24;
         const HGDIOBJ oldPen          = SelectObject(deviceContext, pen);
         const HGDIOBJ oldFont         = SelectObject(deviceContext, font);
         SetBkMode(deviceContext, TRANSPARENT);
@@ -192,7 +206,7 @@ namespace OIV
             MoveToEx(deviceContext, 0, separatorY, nullptr);
             LineTo(deviceContext, size.x, separatorY);
 
-            RECT textRect{0, topLeft.y + 5, 0, topLeft.y + 29};
+            RECT textRect{0, topLeft.y + 4, 0, topLeft.y + 23};
             DrawText(deviceContext, image.title.c_str(), static_cast<int>(image.title.length()), &textRect,
                      DT_CALCRECT);
             const int textOffset = (size.x - (textRect.right - textRect.left)) / 2;
@@ -230,5 +244,6 @@ namespace OIV
         LineTo(deviceContext, 2, size.y);
         SelectObject(deviceContext, oldPen);
         SelectObject(deviceContext, oldFont);
+        RestoreDC(deviceContext, savedState);
     }
 }  // namespace OIV

@@ -2,14 +2,16 @@
 
 namespace OIV
 {
-    MessageManager::MessageManager(LWS::Handle associatedTimerWindow, LabelManager* labelManager, size_t maxMessages,
+    MessageManager::MessageManager(LWS::Window& associatedWindow, LabelManager* labelManager, size_t maxMessages,
                                    RequestRefreshCallbackType callback)
-        : fWindow(associatedTimerWindow), fLabelManager(labelManager), fMaxMessages(maxMessages),
-          fRefreshCallback(callback), fRefreshRequest(std::bind(&MessageManager::OnRefresh, this))
+        : fLabelManager(labelManager), fMaxMessages(maxMessages),
+          fTimerHideUserMessage(associatedWindow.GetPlatformContext()),
+          fFadeTimer(associatedWindow.GetPlatformContext()), fRefreshCallback(callback),
+          fRefreshRequest(std::bind(&MessageManager::OnRefresh, this))
     {
-        fTimerHideUserMessage.SetTargetWindow(fWindow);
+        std::ignore = fTimerHideUserMessage.SetTargetWindow(&associatedWindow);
         fTimerHideUserMessage.SetCallback(std::bind(&MessageManager::OnTimer, this));
-        fFadeTimer.SetTargetWindow(fWindow);
+        std::ignore = fFadeTimer.SetTargetWindow(&associatedWindow);
         fFadeTimer.SetCallback(std::bind(&MessageManager::OnTimer, this));
 
         EventManager::GetSingleton().SizeChange.Add(

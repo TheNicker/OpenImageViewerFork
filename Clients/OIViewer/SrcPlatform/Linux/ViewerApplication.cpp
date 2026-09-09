@@ -8,8 +8,8 @@
 #include <cstdlib>
 #include <filesystem>
 
-#ifdef LWS_PLATFORM_WAYLAND
-    #include <LWS/Wayland/PlatformWayland.hpp>
+#ifdef LWS_HAS_WAYLAND_BACKEND
+    #include <LWS/Wayland/WindowExtensions.hpp>
 #endif
 
 namespace OIV
@@ -69,10 +69,14 @@ namespace OIV
     void ViewerApplication::InitializeRenderer()
     {
         void* nativeDisplay = nullptr;
-#ifdef LWS_PLATFORM_WAYLAND
-        nativeDisplay = LWS::Wayland::GetDisplay();
+#ifdef LWS_HAS_WAYLAND_BACKEND
+        nativeDisplay = *LWS::Wayland::GetDisplay(fWindow.GetCanvasWindow());
 #endif
-        fRenderGateway->Initialize(fWindow.GetCanvasWindow().GetHandle(), nativeDisplay);
+        const auto clientArea = fWindow.GetCanvasWindow().GetClientAreaSize();
+        if (!clientArea.has_value())
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to obtain the canvas size");
+        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(fWindow.GetCanvasWindow())),
+                                   *clientArea, nativeDisplay);
     }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(
@@ -83,6 +87,6 @@ namespace OIV
 
     void ViewerApplication::Run()
     {
-        LWS::Platform::runMessageLoop();
+        fPlatform.RunMessageLoop();
     }
 }  // namespace OIV

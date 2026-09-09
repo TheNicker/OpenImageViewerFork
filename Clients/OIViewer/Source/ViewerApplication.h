@@ -44,23 +44,31 @@
 #include <NetSettings/GuiProvider.h>
 #include <ImageLoader.h>
 #include <ImageCodec.h>
-#include "EventSync.h"
 #include "InterThreadMessages.h"
 #include <OIVShared/ImageResidencyCache.h>
 
 #include <atomic>
+#include <any>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <vector>
 namespace OIV
 {
+    struct EventData
+    {
+        uint16_t id;
+        std::any data;
+    };
+
     class ViewerMouseInput;
     enum class ImageSizeType
     {
@@ -141,7 +149,7 @@ namespace OIV
       public:
 
         void OnLabelRefreshRequest();
-        ViewerApplication();
+        explicit ViewerApplication(LWS::PlatformContext& platform);
         ~ViewerApplication();
         void Init(LLUtils::native_string_type filePath);
         void Run();
@@ -343,15 +351,20 @@ namespace OIV
 
       private:  // member fields
 
+        LWS::PlatformContext& fPlatform;
+
 #pragma region FrameLimiter
         const bool EnableFrameLimiter = true;
         std::chrono::high_resolution_clock::time_point fLastRefreshTime;
         LWS::HighPrecisionTimer fRefreshTimer;
         uint32_t fRefreshRateTimes1000 = 60'000;
-        LWS::Platform::MonitorDesc fCurrentMonitorProperties{};
+        LWS::MonitorDesc fCurrentMonitorProperties{};
         MonitorProvider fMonitorProvider;
 #pragma endregion FrameLimiter
         MainWindow fWindow;
+        LWS::EventConnection fWindowConnection;
+        LWS::EventConnection fCanvasConnection;
+        LWS::EventConnection fPlatformConnection;
         AutoScrollUniquePtr fAutoScroll;
         RecursiveDelayedOp fRefreshOperation;
         RecursiveDelayedOp fPreserveImageSpaceSelection;
@@ -457,6 +470,32 @@ namespace OIV
         void QueueResampling();
         void SortFolderFileList();
         void ApplyBrowseSessionResult(const BrowseSessionController::BrowseSessionResult& result);
+        void DrainUiCompletions();
+
+        template <typename T>
+        void QueueUiCompletion(uint16_t id, T&& value)
+        {
+            bool scheduleDrain = false;
+            {
+                const std::scoped_lock lock(fUiCompletionMutex);
+                fUiCompletions.push_back(EventData{id, std::forward<T>(value)});
+                if (!fUiDrainScheduled)
+                {
+                    fUiDrainScheduled = true;
+                    scheduleDrain     = true;
+                }
+            }
+            if (scheduleDrain)
+            {
+                const std::weak_ptr lifetime = fUiLifetime;
+                std::ignore                  = fPlatform.PostTask(
+                    [this, lifetime]
+                    {
+                        if (lifetime.lock() != nullptr)
+                            DrainUiCompletions();
+                    });
+            }
+        }
 
         std::unique_ptr<ContextMenu<int>> fNotificationContextMenu;
         std::shared_ptr<OIVFileImage> fInitialFile;
@@ -474,9 +513,13 @@ namespace OIV
         LWS::Timer fContextMenuTimer;
         LWS::Timer fSequencerTimer;
         FileSorter fFileSorter;
-        // Destruction order matters: the browse session unregisters folders from the watcher, and the watcher may
-        // still suppress callbacks through fIsShuttingDown / fEventSync while shutting down. Keep this order.
-        EventSync fEventSync;
+        struct UiLifetime
+        {
+        };
+        std::shared_ptr<UiLifetime> fUiLifetime{std::make_shared<UiLifetime>()};
+        std::mutex fUiCompletionMutex;
+        std::vector<EventData> fUiCompletions;
+        bool fUiDrainScheduled{};
         std::atomic_bool fIsShuttingDown = false;
         ImageResidencyCache fImageResidencyCache;
         std::unique_ptr<IFileWatcher> fFileWatcher;

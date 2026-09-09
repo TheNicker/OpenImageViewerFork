@@ -44,7 +44,7 @@ namespace OIV
             uint16_t clickCount;
         };
 
-        MouseMultiClickHandler(uint16_t multipressRate, uint16_t maxTaps);
+        MouseMultiClickHandler(LWS::PlatformContext& platform, uint16_t multipressRate, uint16_t maxTaps);
 
         LLUtils::Event<void(const EventArgs&)> OnMouseClickEvent;
         using ListButtonEvent = std::vector<EventArgs>;
@@ -88,7 +88,7 @@ namespace OIV
         int16_t fPosX                = 0;
         int16_t fPosY                = 0;
         int16_t fMaxMultiClickRadius = 10;
-        LWS::HighPrecisionTimer fTimer{std::bind(&MouseMultiClickHandler::TimerCallback, this)};
+        LWS::HighPrecisionTimer fTimer;
 
         std::array<ButtonData, static_cast<size_t>(LWS::MouseButton::Count)> fButtonsData{};
 

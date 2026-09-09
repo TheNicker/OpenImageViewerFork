@@ -68,7 +68,7 @@ namespace OIV
             fRefreshCallback();
         }
 
-        void ClientSizeChanged(LLUtils::PointI32& size)
+        void ClientSizeChanged(const LLUtils::PointI32& size)
         {
             fClientSize = size;
             if (GetVisible())
