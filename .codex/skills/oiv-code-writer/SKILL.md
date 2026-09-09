@@ -50,13 +50,13 @@ Use this skill as the repo-local coding standard for OIViewer C++ work.
 ## C++ Rules
 
 - Prefer the simplest direct implementation that satisfies the current request. Introduce a new abstraction or architectural layer only when the user asks for it or a concrete current requirement—such as repeated logic, ownership, or a platform boundary—needs it; do not generalize for hypothetical future use.
-- Write the smallest direct C++26 implementation that satisfies the request. Treat every added branch, check, copy, allocation, conversion, abstraction, and state transition as work that must justify its cost.
+- Write concise, minimal, and readily understandable C++26 code containing only what the request and current behavior require. Treat every added branch, check, copy, allocation, conversion, abstraction, and state transition as work that must justify its cost.
 - Keep new public and internal API surface to the minimum required for the requested functionality: use the fewest necessary types, functions, methods, parameters, overloads, callbacks, and configuration options, and keep implementation details private.
 - Prefer one focused, concise interface when it can provide the required functionality. Do not add convenience variants, extensibility points, or generalized hooks for hypothetical callers; preserve existing APIs unless the task explicitly authorizes their removal.
 - Add only code required by current behavior. Remove includes, fields, functions, branches, and other state made unused by the change.
 - Use advanced C++ and STL utilities to remove real boilerplate, duplication, verbose loops, or error-prone branching; do not use clever constructs that hide intent or fight the surrounding style.
-- Prefer structured control flow in ordinary functions. Avoid mid-function `return` for routine branching when `if`/`else`, a result variable, or a scoped branch keeps the code concise and clear.
-- Allow early `return` when it materially improves clarity or safety, such as tiny predicate/accessor functions, unrecoverable precondition paths, avoiding excessive nesting, RAII/resource safety, or complete `switch` case handlers.
+- Prefer a single exit point for simple, routine control flow. Structure the function with `if`/`else`, scoped branches, or a result variable, and place its `return` at the end so readers can identify the exit without searching for mid-function returns.
+- Reserve early `return` for exceptional or unrecoverable paths, or cases where a single exit would materially reduce clarity or safety, such as excessive nesting, RAII/resource safety, or complete `switch` case handlers. Do not use early returns for ordinary branching merely because they shorten the function.
 - Avoid `break` from loops in the same spirit. Prefer loop conditions, sentinel/result variables, extracted predicates, or STL/ranges algorithms when they keep intent clear.
 - Allow loop `break` when it is the clearest mechanism, such as search completion, parser/state-machine termination, a `switch` inside a loop, error termination, or performance-sensitive loops where alternatives obscure the code.
 - Do not mechanically rewrite existing code solely to remove early exits; apply this guidance to new or touched code when it improves clarity.
@@ -87,11 +87,20 @@ Use this skill as the repo-local coding standard for OIViewer C++ work.
 - Prefer compile-time enforcement, trusted internal contracts, validation at existing external boundaries, cached or amortized work, and other zero-overhead mechanisms over repeated runtime checks. Do not remove existing validation or safety checks unless the requested change authorizes it.
 - When workload context is insufficient to rule out a regression, flag the affected path, suspected cost, and evidence or measurement needed; do not assume the added cost is acceptable.
 
-## Comments and Exceptional Handling
+## Documentation and Exceptional Handling
 
-- Document workarounds, non-obvious edge cases, and platform- or framework-specific handling at the narrowest relevant scope.
-- Add missing comments for non-obvious input assumptions, supported-use boundaries, and performance decisions. Explain why the handling is necessary, which environment or external behavior requires it, and the invariant it preserves; include a removal condition when useful.
-- Do not narrate obvious code or retain comments after the exceptional behavior they explain is removed.
+- For new or changed first-party exception paths, prefer the LLUtils exception facilities, such as `LL_EXCEPTION`, `LL_EXCEPTION_SYSTEM_ERROR`, `LL_EXCEPTION_UNEXPECTED_VALUE`, and `LL_EXCEPTION_NOT_IMPLEMENT`, over directly throwing standard-library exception types.
+- Choose the narrowest meaningful `LLUtils::Exception::ErrorCode`; use `LL_EXCEPTION_DONT_THROW` only when reporting an error without unwinding is the intended behavior.
+- Keep a standard-library or foreign exception when an API, framework, test, or third-party boundary requires that exact exception type, or when reaching LLUtils would introduce a new or cumbersome dependency. Catching `std::exception` at a boundary remains appropriate when failures from standard-library or external code must also be handled.
+- Do not add an LLUtils dependency solely to replace a standard exception without first checking the target's existing dependency graph and nearby conventions.
+- Prefer expressive names, narrow types, and clear structure. Use comments to preserve information that the code cannot make obvious, not to compensate for unclear code.
+- Document a function contract when callers cannot readily infer it from the signature and implementation. Capture the relevant input assumptions, supported-use boundaries, invariants, ownership and lifetime, side effects, ordering or threading requirements, platform assumptions, and performance decisions. Do not require Doxygen or a comment for every function.
+- Explain non-obvious logic and design choices at the narrowest relevant scope. Connect the reason for a choice to the behavior or invariant it preserves, especially when a simpler-looking alternative would be incorrect.
+- When an implementation is intentionally limited, partial, or scoped to current use cases, document that design decision at the narrowest relevant scope. State the supported scope, what a full or more comprehensive implementation would require, and why that work is deferred or not justified now.
+- Record surprising user-visible precedence, cancellation, or interaction rules beside the decision that enforces them, and encode the same contract in focused tests when practical.
+- Document workarounds and exceptional platform or framework handling with the external constraint that requires them and a removal condition when useful.
+- When nearby behavior changes, revalidate its comments and update or remove anything stale, contradictory, or no longer useful.
+- Do not narrate obvious statements, branches, or control flow.
 
 ## Testing
 
