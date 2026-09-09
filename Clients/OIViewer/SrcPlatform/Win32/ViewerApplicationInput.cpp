@@ -29,15 +29,12 @@ namespace OIV
         const auto& mouse = static_cast<const RawInput::RawInputEventMouse&>(event);
         constexpr std::array buttons{LWS::MouseButton::Left, LWS::MouseButton::Right, LWS::MouseButton::Middle,
                                      LWS::MouseButton::X1, LWS::MouseButton::X2};
-        auto& canvas           = owner.fWindow.GetCanvasWindow();
-        const bool mouseInside = canvas.IsMouseInClientRect();
         for (size_t index = 0; index < buttons.size(); ++index)
         {
-            if (mouse.buttonState[index] != ButtonState::NotSet)
-                owner.fMouseInput->SetButton(event.deviceIndex, buttons[index],
-                                             mouse.buttonState[index] == ButtonState::Down, mouseInside);
+            if (mouse.buttonState[index] == ButtonState::Up)
+                owner.fMouseInput->SetButton(buttons[index], false, false);
         }
-        owner.fMouseInput->Move(event.deviceIndex, {mouse.deltaX, mouse.deltaY});
+        owner.fMouseInput->Move({mouse.deltaX, mouse.deltaY});
         if (mouse.wheelDelta != 0)
             owner.fMouseInput->Wheel(static_cast<double>(mouse.wheelDelta) / LWS::EventMouseWheel::DeltaPerStep);
     }
@@ -105,6 +102,11 @@ namespace OIV
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
+        if (const auto* button = std::get_if<LWS::EventMouseButton>(&eventData))
+        {
+            fMouseInput->SetButton(button->button, button->pressed, true);
+            return 1;
+        }
         if (std::holds_alternative<LWS::EventClientAreaSizeChanged>(eventData))
         {
             fRefreshOperation.Begin();
@@ -157,6 +159,14 @@ namespace OIV
 
     bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
     {
+        if (const auto* button = std::get_if<LWS::EventMouseButton>(&eventData))
+        {
+            const auto canvasSize  = fWindow.GetCanvasWindow().GetClientSize();
+            const bool mouseInside = button->position.x >= 0 && button->position.y >= 0 &&
+                                     button->position.x < canvasSize.x && button->position.y < canvasSize.y;
+            fMouseInput->SetButton(button->button, button->pressed, mouseInside);
+            return mouseInside || !button->pressed;
+        }
         if (std::holds_alternative<LWS::EventMove>(eventData))
             fMonitorProvider.UpdateFromWindow(fWindow.GetWindow());
         else if (std::holds_alternative<LWS::EventMouseMove>(eventData))

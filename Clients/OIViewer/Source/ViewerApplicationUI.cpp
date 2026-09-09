@@ -410,9 +410,10 @@ namespace OIV
     void ViewerApplication::OnContextMenuTimer()
     {
         fContextMenuTimer.SetInterval(0);
-        auto pos        = fPlatform.GetMousePosition().value_or(LWS::Point{});
+        const auto pos  = fPlatform.GetMousePosition().value_or(LWS::Point{});
         auto chosenItem = fContextMenu->Show(pos.x - 16, pos.y + -16, AlignmentHorizontal::Center,
                                              AlignmentVertical::Center);
+        fMouseInput->Cancel();
 
         if (chosenItem != nullptr)
         {

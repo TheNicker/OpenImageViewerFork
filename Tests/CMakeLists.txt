@@ -16,6 +16,8 @@ endif()
 add_executable (${TargetName} ${sourceFiles})
 target_sources(${TargetName} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/Source/ImageList.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/Source/MouseGestureController.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/Source/MouseMultiClickHandler.cpp
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")

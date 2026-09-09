@@ -1,14 +1,12 @@
 #pragma once
 
-#include "MouseCaptureState.h"
+#include "MouseGestureController.h"
 #include "MouseMultiClickHandler.h"
 
 #include <LWS/MouseButton.hpp>
-#include <LWS/Event.hpp>
+#include <LWS/WindowTypes.hpp>
 
-#include <array>
 #include <cstdint>
-#include <map>
 
 namespace OIV
 {
@@ -20,8 +18,8 @@ namespace OIV
 
         explicit ViewerMouseInput(ViewerApplication& owner);
 
-        void SetButton(uint8_t deviceId, LWS::MouseButton button, bool pressed, bool mouseInside);
-        void Move(uint8_t deviceId, LWS::Point delta);
+        void SetButton(LWS::MouseButton button, bool pressed, bool mouseInside);
+        void Move(LWS::Point delta);
         // A value of 1.0 is one logical wheel detent (120 platform delta units).
         void Wheel(double steps);
         void Cancel();
@@ -29,18 +27,17 @@ namespace OIV
 
       private:
 
-        static constexpr size_t ButtonCount            = static_cast<size_t>(LWS::MouseButton::Count);
         static constexpr double ZoomAmountPerWheelStep = 0.2;
-        using ButtonState                              = std::array<bool, ButtonCount>;
+        static constexpr uint32_t ContextMenuDelayMs   = 500;
 
-        void OnButton(uint8_t deviceId, LWS::MouseButton button, bool pressed, bool mouseInside);
+        void ApplyDecision(const MouseGestureController::Decision& decision);
+        [[nodiscard]] MouseGestureController::ButtonContext GetButtonContext(LWS::MouseButton button) const;
         void OnMultiClick(const MouseMultiClickHandler::EventArgs& event);
-        [[nodiscard]] const ButtonState* FindDevice(uint8_t deviceId) const;
+        void ToggleAutoScroll();
+        void StopAutoScroll();
 
         ViewerApplication& fOwner;
-        std::map<uint8_t, ButtonState> fDevices;
-        MouseCaptureState fCapture;
+        MouseGestureController fController;
         MouseMultiClickHandler fMultiClick;
-        LLUtils::Point<int64_t> fRightDragDelta{};
     };
 }  // namespace OIV
