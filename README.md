@@ -48,7 +48,8 @@ without a platform-specific outer-window sizing API.
 On Wayland, logical units are compositor surface coordinates rather than physical-monitor DPI. OIViewer uses
 `wp_fractional_scale_v1` with `wp_viewporter` when available and otherwise uses the entered outputs' integer scale.
 Scale-matched buffers keep 100% image zoom pixel-accurate; the compositor controls top-level placement and may adjust
-the requested logical size.
+the requested logical size. OIViewer sets its Wayland app ID, while compositor window icons come from the matching
+installed desktop-file metadata rather than an icon attached to the window.
 
 ### Windows Runtime Notes
 

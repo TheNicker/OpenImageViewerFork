@@ -7,6 +7,7 @@ namespace OIV
 {
     LWS::Result MainWindow::Create(const LWS::WindowConfig& config)
     {
+        SetApplicationIcon();
         const LWS::Result result = fWindow.Create(config);
         if (result == LWS::Result::Success)
             return OnCreate();
@@ -42,7 +43,6 @@ namespace OIV
                 return result;
             }
         }
-        SetApplicationIcon();
         UpdateLayout();
         return LWS::Result::Success;
     }

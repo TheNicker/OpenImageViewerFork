@@ -8,9 +8,29 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace OIV
 {
+    namespace
+    {
+        struct IconResources
+        {
+            ~IconResources()
+            {
+                if (color != nullptr)
+                    DeleteObject(color);
+                if (mask != nullptr)
+                    DeleteObject(mask);
+                if (icon != nullptr)
+                    DestroyIcon(icon);
+            }
+
+            HICON icon{};
+            HBITMAP color{};
+            HBITMAP mask{};
+        };
+    }  // namespace
 
     struct MainWindow::NativeState
     {
@@ -64,10 +84,44 @@ namespace OIV
 
     void MainWindow::SetApplicationIcon()
     {
-        const HICON icon  = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
-        const HWND window = *LWS::Win32::GetHwnd(fWindow);
-        ::SendMessage(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icon));
-        ::SendMessage(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon));
+        IconResources handles;
+        handles.icon = static_cast<HICON>(
+            LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_APP_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
+        if (handles.icon == nullptr)
+            return;
+
+        ICONINFO info{};
+        const BOOL infoResult = GetIconInfo(handles.icon, &info);
+        handles.color         = info.hbmColor;
+        handles.mask          = info.hbmMask;
+        BITMAP bitmap{};
+        if (infoResult == FALSE || handles.color == nullptr || GetObjectW(handles.color, sizeof(bitmap), &bitmap) == 0)
+            return;
+
+        BITMAPINFO bitmapInfo{};
+        bitmapInfo.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+        bitmapInfo.bmiHeader.biWidth       = bitmap.bmWidth;
+        bitmapInfo.bmiHeader.biHeight      = -bitmap.bmHeight;
+        bitmapInfo.bmiHeader.biPlanes      = 1;
+        bitmapInfo.bmiHeader.biBitCount    = 32;
+        bitmapInfo.bmiHeader.biCompression = BI_RGB;
+        std::vector<std::byte> pixels(static_cast<size_t>(bitmap.bmWidth) * bitmap.bmHeight * 4U);
+        HDC screen       = GetDC(nullptr);
+        const int copied = GetDIBits(screen, handles.color, 0, static_cast<UINT>(bitmap.bmHeight), pixels.data(),
+                                     &bitmapInfo, DIB_RGB_COLORS);
+        ReleaseDC(nullptr, screen);
+        if (copied == bitmap.bmHeight)
+        {
+            auto resource = LWS::WindowIcon::FromBitmap({
+                .pixels   = pixels,
+                .format   = LWS::BitmapPixelFormat::Bgra8,
+                .width    = static_cast<uint32_t>(bitmap.bmWidth),
+                .height   = static_cast<uint32_t>(bitmap.bmHeight),
+                .rowPitch = static_cast<uint32_t>(bitmap.bmWidth) * 4U,
+            });
+            if (resource.has_value())
+                std::ignore = fWindow.SetWindowIcon(std::move(*resource));
+        }
     }
 
     void MainWindow::UpdateNativeStatusBar(LWS::LogicalSize& canvasSize)
