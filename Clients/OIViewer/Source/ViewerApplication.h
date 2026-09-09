@@ -196,7 +196,6 @@ namespace OIV
         void AddCommandsAndKeyBindings();
         void AddPlatformKeyBindings();
         void OnMonitorChanged(const EventManager::MonitorChangeEventParams& params);
-        void ProbeForMonitorChange();
         void PerformRefresh();
         void SetUserMessage(const LLUtils::native_string_type& message, GroupID groupID = 0,
                             MessageFlags groupFlags = MessageFlags::Interchangeable);

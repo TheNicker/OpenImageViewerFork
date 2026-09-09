@@ -157,7 +157,9 @@ namespace OIV
 
     bool ViewerApplication::HandleWinMessageEvent(const LWS::AnyEvent& eventData)
     {
-        if (std::holds_alternative<LWS::EventMouseMove>(eventData))
+        if (std::holds_alternative<LWS::EventMove>(eventData))
+            fMonitorProvider.UpdateFromWindow(fWindow.GetWindow());
+        else if (std::holds_alternative<LWS::EventMouseMove>(eventData))
             UpdateTexelPos();
         else if (std::holds_alternative<LWS::EventCloseRequested>(eventData))
             CloseApplication(false);
