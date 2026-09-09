@@ -3,9 +3,10 @@
 
 namespace OIV
 {
-	class System
-	{
-	public:
-		static uint32_t GetIdealNumThreadsForMemoryOperations();
-	};
-}
+    class System
+    {
+      public:
+
+        static uint32_t GetIdealNumThreadsForMemoryOperations();
+    };
+}  // namespace OIV
