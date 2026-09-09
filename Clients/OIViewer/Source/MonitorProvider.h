@@ -11,10 +11,10 @@ namespace OIV
     {
       public:
 
-        void UpdateFromWindowHandle(LWS::Handle windowHandle);
+        void UpdateFromWindow(LWS::Window& window);
 
       private:
 
-        LWS::Platform::MonitorDesc fMonitorDesc{};
+        LWS::MonitorDesc fMonitorDesc{};
     };
 }  // namespace OIV

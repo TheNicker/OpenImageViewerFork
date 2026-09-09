@@ -4,10 +4,10 @@
 
 namespace OIV
 {
-    MouseMultiClickHandler::MouseMultiClickHandler(uint16_t multipressRate, uint16_t maxTaps)
-        :
-
-          fMultiPressThreshold(multipressRate), fMaxTaps(maxTaps)
+    MouseMultiClickHandler::MouseMultiClickHandler(LWS::PlatformContext& platform, uint16_t multipressRate,
+                                                   uint16_t maxTaps)
+        : fMultiPressThreshold(multipressRate), fMaxTaps(maxTaps),
+          fTimer(platform, std::bind(&MouseMultiClickHandler::TimerCallback, this))
     {
         fTimer.SetDueTime(multipressRate);
         fTimer.SetRepeatInterval(std::numeric_limits<uint32_t>::max());

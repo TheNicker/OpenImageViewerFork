@@ -122,7 +122,12 @@ namespace OIV
     void ViewerApplication::ToggleFullScreen(bool multiFullScreen)
     {
         fRefreshOperation.Begin();
-        fWindow.ToggleFullScreen(multiFullScreen);
+        const LWS::WindowMode currentMode   = fWindow.GetWindow().GetWindowMode();
+        const LWS::WindowMode requestedMode = currentMode == LWS::WindowMode::Windowed
+                                                  ? (multiFullScreen ? LWS::WindowMode::FullscreenAllMonitors
+                                                                     : LWS::WindowMode::Fullscreen)
+                                                  : LWS::WindowMode::Windowed;
+        std::ignore                         = fWindow.GetWindow().SetWindowMode(requestedMode);
         Center();
         fRefreshOperation.End();
     }
@@ -131,7 +136,9 @@ namespace OIV
     {
         fShowBorders = !fShowBorders;
         {
-            fWindow.SetWindowStyles(WindowChromeStyles, fShowBorders);
+            std::ignore = fWindow.GetWindow().SetWindowStyles(fShowBorders
+                                                                  ? LWS::WindowStyleFlags(WindowChromeStyles)
+                                                                  : LWS::WindowStyleFlags(LWS::WindowStyle::NoStyle));
             fWindow.UpdateLayout();
         }
     }
@@ -218,7 +225,7 @@ namespace OIV
         if (IsImageOpen())
         {
             using namespace LLUtils;
-            const LWS::Size clientSize = fWindow.GetCanvasSize();
+            const LWS::PixelSize clientSize = fWindow.GetCanvasPixelSize();
             if (clientSize.x > 0 && clientSize.y > 0)  // window might minimized.
             {
                 const double zoom = ViewTransformController::FitScale(PointF64(clientSize.x, clientSize.y),
@@ -263,7 +270,7 @@ namespace OIV
             fSelectionRect.GetSelectionRect(),
             {static_cast<int32_t>(selectionSizeText->GetImage()->GetWidth()),
              static_cast<int32_t>(selectionSizeText->GetImage()->GetHeight())},
-            static_cast<LLUtils::PointI32>(fWindow.GetClientSize()));
+            static_cast<LLUtils::PointI32>(fWindow.GetCanvasPixelSize()));
 
         selectionSizeText->SetPosition(static_cast<LLUtils::PointF64>(labelPosition));
     }
@@ -393,9 +400,11 @@ namespace OIV
         if (fImageState.GetImage(ImageChainStage::Deformed) != nullptr)
         {
             using namespace  LLUtils;
-            PointF64 canvasSize = (PointF64)fWindow.GetCanvasSize() / GetScale();
-            LLUtils::native_stringstream ss;
-            ss << LLUTILS_TEXT("Canvas: ")
+            const LWS::PixelSize pixels = fWindow.GetCanvasPixelSize();
+            PointF64 canvasSize =
+    PointF64(pixels.x, pixels.y) / GetScale();
+            LLUtils::native_stringstream ss; ss << LLUTILS_TEXT("Canvas:
+    ")
                 << std::fixed << std::setprecision(1) << std::setfill(L' ') << std::setw(6) << canvasSize.x
                 << LLUTILS_TEXT(" X ")
                 << std::fixed << std::setprecision(1) << std::setfill(L' ') << std::setw(6) << canvasSize.y;
@@ -410,7 +419,7 @@ namespace OIV
             if (fImageState.GetImage(ImageChainStage::Deformed) != nullptr)
             {
                 using namespace LLUtils;
-                PointF64 storageImageSpace = ClientToImage(fWindow.GetMousePosition());
+                PointF64 storageImageSpace = ClientToImage(fWindow.GetWindowMousePosition());
 
                 LLUtils::native_stringstream ss;
                 ss << LLUTILS_TEXT("Texel: ") << std::fixed << std::setprecision(1)
@@ -454,14 +463,19 @@ namespace OIV
 
     void ViewerApplication::UpdateWindowSize()
     {
-        const LWS::Size size = fWindow.GetCanvasSize();
+        const LWS::PixelSize size = fWindow.GetCanvasPixelSize();
+        const auto clientArea     = fWindow.GetCanvasWindow().GetClientAreaSize();
 
-        if (size.x > 0 && size.y > 0)  // window might minimized.
+        if (size.x > 0 && size.y > 0 && clientArea.has_value())  // window might be minimized or unconfigured.
         {
-            fRenderGateway->SetClientSize(static_cast<uint16_t>(size.x), static_cast<uint16_t>(size.y));
+            const LWS::ContentScale scale          = clientArea->Scale();
+            fDPIadjustmentFactor                   = {scale.x, scale.y};
+            fCurrentMonitorProperties.contentScale = scale;
+            fLabelManager.SetContentScale(scale);
+            fRenderGateway->SetViewportSize(*clientArea);
             // UpdateCanvasSize();
             AutoPlaceImage();
-            auto point = static_cast<LLUtils::PointI32>(fWindow.GetCanvasSize());
+            const LLUtils::PointI32 point{size.x, size.y};
             fVirtualStatusBar.ClientSizeChanged(point);
 
             EventManager::GetSingleton().SizeChange.Raise(

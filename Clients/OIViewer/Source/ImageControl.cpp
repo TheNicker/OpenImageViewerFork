@@ -22,18 +22,11 @@ namespace OIV
                         break;
                 }
             });
-        std::ignore = AddEventListener(
-            [this](const LWS::AnyEvent& eventData) noexcept
-            {
-                try
-                {
-                    return HandleWindowEvent(eventData);
-                }
-                catch (...)
-                {
-                    return true;
-                }
-            });
+        auto connection = fWindow.Listen(
+            [this](const LWS::AnyEvent& eventData)
+            { return HandleWindowEvent(eventData) ? LWS::EventResponse::Handled : LWS::EventResponse::Unhandled; });
+        if (connection.has_value())
+            fEventConnection = std::move(*connection);
     }
 
     void ImageControl::SetImagePos(int pos)

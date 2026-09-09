@@ -1,7 +1,7 @@
 #pragma once
 
 #include <LLUtils/StringDefs.h>
-#include <LWS/interfaces/backends.hpp>
+#include <LWS/Window.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -33,7 +33,7 @@ namespace OIV
         {
           public:
 
-            explicit ContextMenuBackend(LWS::Handle windowHandle);
+            explicit ContextMenuBackend(LWS::Window& window);
             ~ContextMenuBackend();
 
             ContextMenuBackend(const ContextMenuBackend&)            = delete;
@@ -65,7 +65,7 @@ namespace OIV
 
       public:
 
-        explicit ContextMenu(LWS::Handle windowHandle) : fBackend(windowHandle) {}
+        explicit ContextMenu(LWS::Window& window) : fBackend(window) {}
 
         MenuItemData* Show(int x, int y, AlignmentHorizontal horizontal, AlignmentVertical vertical)
         {

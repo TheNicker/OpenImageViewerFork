@@ -3,7 +3,7 @@
 #include <LLUtils/Event.h>
 #include <LLUtils/StringDefs.h>
 #include <LWS/Bitmap.hpp>
-#include <LWS/interfaces/backends.hpp>
+#include <LWS/WindowTypes.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -70,7 +70,7 @@ class ImageList
 
   private:
 
-    static constexpr int32_t RowHeight = 100;
+    static constexpr int32_t RowHeight = 80;
     static constexpr int32_t LineWidth = 2;
     int32_t fViewportHeight            = 0;
     int fSelected                      = -1;

@@ -2,5 +2,5 @@
 
 namespace OIV
 {
-    void MonitorProvider::UpdateFromWindowHandle([[maybe_unused]] LWS::Handle windowHandle) {}
+    void MonitorProvider::UpdateFromWindow([[maybe_unused]] LWS::Window& window) {}
 }  // namespace OIV

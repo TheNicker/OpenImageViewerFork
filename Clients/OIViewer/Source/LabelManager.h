@@ -35,6 +35,7 @@ namespace OIV
         void Remove(const std::string& labelName);
         OIVTextImage* GetTextLabel(const std::string& labelName);
         OIVTextImage* GetOrCreateTextLabel(const std::string& labelName);
+        void SetContentScale(const LWS::ContentScale& scale);
 
       private:
 

@@ -9,12 +9,15 @@
 
 namespace OIV
 {
-    class ImageControl : public LWS::Window
+    class ImageControl
     {
       public:
 
-        ImageControl();
-        ~ImageControl() override;
+        explicit ImageControl(LWS::PlatformContext& platform);
+        ~ImageControl();
+
+        [[nodiscard]] LWS::Window& GetWindow() { return fWindow; }
+        [[nodiscard]] const LWS::Window& GetWindow() const { return fWindow; }
 
         void SetImagePos(int pos);
         ImageList& GetImageList();
@@ -31,7 +34,10 @@ namespace OIV
         void RequestRepaint();
         void UpdateScrollPosition();
 
+        LWS::Window fWindow;
         ImageList fImageList;
         std::unique_ptr<NativeState> fNativeState;
+        LWS::EventConnection fEventConnection;
+        LWS::EventConnection fPlatformConnection;
     };
 }  // namespace OIV

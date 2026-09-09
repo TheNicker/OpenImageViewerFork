@@ -10,14 +10,14 @@ namespace OIV
 
         static LWS::FileDialogResult Show(LWS::FileDialogType dialogType,
                                           const LWS::FileDialogFilterBuilder::ListFileDialogFilters& filters,
-                                          const LWS::file_dialog_string_type& title, LWS::Handle ownerWindow,
+                                          const LWS::file_dialog_string_type& title, LWS::Window& ownerWindow,
                                           const LWS::file_dialog_string_type& defaultExtension, uint32_t filterIndex,
                                           LWS::file_dialog_string_type defaultFileName,
                                           LWS::file_dialog_string_type& outFilename);
 
         static LWS::FileDialogResult Show(LWS::FileDialogType dialogType,
                                           const LWS::FileDialogFilterBuilder::ListFileDialogFilters& filters,
-                                          const LWS::file_dialog_string_type& title, LWS::Handle ownerWindow,
+                                          const LWS::file_dialog_string_type& title, LWS::Window& ownerWindow,
                                           const LWS::file_dialog_string_type& defaultExtension, uint32_t filterIndex,
                                           LWS::file_dialog_string_type defaultFileName,
                                           LWS::ListFileDialogFileNames& outFilenames);

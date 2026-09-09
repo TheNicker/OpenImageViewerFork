@@ -210,19 +210,16 @@ namespace OIV
 
         if (fullscreenModeChanged == true)
         {
-            switch (fWindow.GetFullScreenState())
+            switch (fWindow.GetWindow().GetWindowMode())
             {
-                case LWS::FullScreenState::MultiScreen:
+                case LWS::WindowMode::FullscreenAllMonitors:
                     result.resValue = LLUTILS_TEXT("Multi full screen");
                     break;
-                case LWS::FullScreenState::SingleScreen:
+                case LWS::WindowMode::Fullscreen:
                     result.resValue = LLUTILS_TEXT("Full screen");
                     break;
-                case LWS::FullScreenState::Windowed:
+                case LWS::WindowMode::Windowed:
                     result.resValue = LLUTILS_TEXT("Windowed");
-                    break;
-                case LWS::FullScreenState::None:
-                    LL_EXCEPTION_UNEXPECTED_VALUE;
                     break;
             }
         }
@@ -322,7 +319,7 @@ namespace OIV
                 }
 
                 auto result = PlatformFileDialog::Show(LWS::FileDialogType::SaveFile, fSaveComDlgFilters.GetFilters(),
-                                                       LLUTILS_TEXT("Save an image"), fWindow.GetHandle(),
+                                                       LLUTILS_TEXT("Save an image"), fWindow.GetWindow(),
                                                        LLUTILS_TEXT("*.") + fDefaultSaveFileExtension,
                                                        fDefaultSaveFileFormatIndex, defaultFileName, saveFilePath);
 
@@ -353,7 +350,7 @@ namespace OIV
         {
             LLUtils::native_string_type openFilePath;
             auto result = PlatformFileDialog::Show(LWS::FileDialogType::OpenFile, fOpenComDlgFilters.GetFilters(),
-                                                   LLUTILS_TEXT("Open image"), fWindow.GetHandle(), {}, 0, {},
+                                                   LLUTILS_TEXT("Open image"), fWindow.GetWindow(), {}, 0, {},
                                                    openFilePath);
 
             if (result == LWS::FileDialogResult::Success)
@@ -390,32 +387,34 @@ namespace OIV
     void ViewerApplication::CMD_SetWindowSize(const CommandManager::CommandRequest& request,
                                               CommandManager::CommandResult& result)
     {
-        const auto& workRect              = fCurrentMonitorProperties.workRect;
-        const auto workAreaTopLeft        = workRect.GetCorner(LLUtils::TopLeft);
-        const auto workAreaBottomRight    = workRect.GetCorner(LLUtils::BottomRight);
-        const WindowWorkingArea workArea  = {.left   = workAreaTopLeft.x,
-                                             .top    = workAreaTopLeft.y,
-                                             .right  = workAreaBottomRight.x,
-                                             .bottom = workAreaBottomRight.y};
-        const WindowSizeDecision decision = ViewCommandPolicy::DecideWindowSize(request.args, fWindow.GetWindowSize(),
-                                                                                fWindow.GetPosition(), workArea);
+        const auto& workRect               = fCurrentMonitorProperties.workRect;
+        const auto workAreaTopLeft         = workRect.GetCorner(LLUtils::TopLeft);
+        const auto workAreaBottomRight     = workRect.GetCorner(LLUtils::BottomRight);
+        const WindowWorkingArea workArea   = {.left   = workAreaTopLeft.x,
+                                              .top    = workAreaTopLeft.y,
+                                              .right  = workAreaBottomRight.x,
+                                              .bottom = workAreaBottomRight.y};
+        const LWS::LogicalSize currentSize = fWindow.GetWindow().GetClientSize();
+        const WindowSizeDecision decision  = ViewCommandPolicy::DecideWindowSize(
+            request.args, {currentSize.x, currentSize.y}, fWindow.GetWindow().GetPosition().value_or(LWS::Point{}),
+            workArea);
 
         switch (decision.mode)
         {
             case WindowSizeMode::Fullscreen:
-                fWindow.SetFullScreenState(LWS::FullScreenState::SingleScreen);
+                std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::Fullscreen);
                 break;
             case WindowSizeMode::MultiFullscreen:
-                fWindow.SetFullScreenState(LWS::FullScreenState::MultiScreen);
+                std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::FullscreenAllMonitors);
                 break;
             case WindowSizeMode::Windowed:
-                if (fWindow.GetFullScreenState() != LWS::FullScreenState::Windowed)
-                    fWindow.SetFullScreenState(LWS::FullScreenState::Windowed);
+                if (fWindow.GetWindow().GetWindowMode() != LWS::WindowMode::Windowed)
+                    std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::Windowed);
 
-                if (decision.position != fWindow.GetPosition())
-                    fWindow.SetPosition(decision.position.x, decision.position.y);
+                if (decision.position != fWindow.GetWindow().GetPosition().value_or(LWS::Point{}))
+                    std::ignore = fWindow.GetWindow().SetPosition(decision.position);
 
-                fWindow.SetSize(decision.size.x, decision.size.y);
+                std::ignore = fWindow.GetWindow().RequestClientSize({decision.size.x, decision.size.y});
                 break;
             case WindowSizeMode::None:
                 break;
@@ -546,7 +545,7 @@ namespace OIV
         {
             if (IsOpenedImageIsAFile())
             {
-                fClipboardHelper.SetClipboardText(fWindow.GetHandle(), GetOpenedFileName().c_str());
+                fClipboardHelper.SetClipboardText(fWindow.GetWindow(), GetOpenedFileName().c_str());
                 result.resValue = LLUtils::StringUtility::ToNativeString(request.displayName);
             }
         }

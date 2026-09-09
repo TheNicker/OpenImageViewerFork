@@ -36,6 +36,8 @@ namespace OIV
 
     struct ViewerApplication::NativeWindowState
     {
+        explicit NativeWindowState(LWS::PlatformContext& platform) : notificationIcons(platform) {}
+
         LWS::NotificationIconGroup notificationIcons;
         HMODULE settingsModule                    = nullptr;
         DLL_DIRECTORY_COOKIE settingsDllDirectory = nullptr;

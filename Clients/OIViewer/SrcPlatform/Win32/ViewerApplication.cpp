@@ -9,6 +9,8 @@
 
 #include <Windows.h>
 
+#include <LWS/Win32/WindowExtensions.hpp>
+
 #include <iostream>
 
 namespace OIV
@@ -36,7 +38,7 @@ namespace OIV
     void ViewerApplication::InitializePlatformState()
     {
         fRawInputState.reset(new RawInputState(*this));
-        fNativeWindowState.reset(new NativeWindowState());
+        fNativeWindowState.reset(new NativeWindowState(fPlatform));
         fFileWatcher   = std::make_unique<Win32::FileWatcherWin32>();
         fRenderGateway = std::make_unique<OivRenderGateway>();
     }
@@ -61,7 +63,11 @@ namespace OIV
 
     void ViewerApplication::InitializeRenderer()
     {
-        fRenderGateway->Initialize(fWindow.GetCanvasWindow().GetHandle());
+        const auto canvasHandle = LWS::Win32::GetHwnd(fWindow.GetCanvasWindow());
+        const auto clientArea   = fWindow.GetCanvasWindow().GetClientAreaSize();
+        if (!canvasHandle.has_value() || !clientArea.has_value())
+            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to obtain the canvas window handle");
+        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*canvasHandle), *clientArea);
     }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(LWS::NotificationIconGroup::IconID iconId) const
@@ -71,25 +77,6 @@ namespace OIV
 
     void ViewerApplication::Run()
     {
-        bool shouldQuit = false;
-        while (!shouldQuit)
-        {
-            constexpr DWORD count    = 1;
-            const HANDLE eventHandle = reinterpret_cast<HANDLE>(fEventSync.GetEventHandle());
-            const DWORD result       = MsgWaitForMultipleObjects(count, &eventHandle, FALSE, INFINITE, QS_ALLINPUT);
-            if (result < count)
-            {
-                fEventSync.ProcessData();
-            }
-            else if (result == WAIT_FAILED)
-            {
-                std::cerr << "Wait failed! Error: " << GetLastError() << std::endl;
-                shouldQuit = true;
-            }
-            else
-            {
-                shouldQuit = LWS::Platform::processMessages();
-            }
-        }
+        fPlatform.RunMessageLoop();
     }
 }  // namespace OIV

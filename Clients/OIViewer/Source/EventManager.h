@@ -7,29 +7,25 @@ namespace OIV
 {
     class EventManager : public LLUtils::Singleton<EventManager>
     {
-    public:
+      public:
 
         struct MonitorChangeEventParams
         {
-            LWS::Platform::MonitorDesc monitorDesc;
+            LWS::MonitorDesc monitorDesc;
         };
 
         using MonitorChangeEvent = LLUtils::Event<void(const MonitorChangeEventParams&)>;
-        
-        MonitorChangeEvent MonitorChange;
 
+        MonitorChangeEvent MonitorChange;
 
         struct SizeChangeEventParams
         {
             int32_t width;
             int32_t height;
-            
         };
 
         using SizeChangeEvent = LLUtils::Event<void(const SizeChangeEventParams&)>;
 
         SizeChangeEvent SizeChange;
-
-        
     };
-}
+}  // namespace OIV

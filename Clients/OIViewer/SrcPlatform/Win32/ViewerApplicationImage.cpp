@@ -8,6 +8,7 @@
 #include <LLUtils/StringUtility.h>
 
 #include <Windows.h>
+#include <LWS/Win32/WindowExtensions.hpp>
 #include <shellapi.h>
 
 #include <array>
@@ -114,7 +115,7 @@ namespace OIV
             LWS::ClipboardDataView{.format = CF_DIB, .data = {dibBuffer.data(), dibBuffer.size()}},
             LWS::ClipboardDataView{.format = CF_DIBV5, .data = {dibV5Buffer.data(), dibV5Buffer.size()}},
         };
-        return fClipboardHelper.SetClipboardData(fWindow.GetHandle(), clipboardData) == LWS::ClipboardResult::Success;
+        return fClipboardHelper.SetClipboardData(fWindow.GetWindow(), clipboardData) == LWS::ClipboardResult::Success;
     }
 
     void ViewerApplication::HandleReloadAction(ReloadAction action, const LLUtils::native_string_type& requestedFile)
@@ -122,7 +123,7 @@ namespace OIV
         if (action == ReloadAction::AskUser)
         {
             using namespace std::string_literals;
-            const int result = MessageBox(reinterpret_cast<HWND>(fWindow.GetHandle()),
+            const int result = MessageBox(*LWS::Win32::GetHwnd(fWindow.GetWindow()),
                                           (LLUTILS_TEXT("Reload the file: "s) + requestedFile).c_str(),
                                           LLUTILS_TEXT("File is changed outside of OIV"), MB_YESNO);
             action           = fFileReloadPolicy.ConfirmReload(result == IDYES);

@@ -40,7 +40,7 @@ namespace OIV
         ViewerApplication& fOwner;
         std::map<uint8_t, ButtonState> fDevices;
         MouseCaptureState fCapture;
-        MouseMultiClickHandler fMultiClick{500, 2};
+        MouseMultiClickHandler fMultiClick;
         LLUtils::Point<int64_t> fRightDragDelta{};
     };
 }  // namespace OIV

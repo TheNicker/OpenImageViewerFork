@@ -61,6 +61,18 @@
 
 namespace OIV
 {
+    void ViewerApplication::DrainUiCompletions()
+    {
+        std::vector<EventData> completions;
+        {
+            const std::scoped_lock lock(fUiCompletionMutex);
+            completions.swap(fUiCompletions);
+            fUiDrainScheduled = false;
+        }
+        for (const auto& completion : completions)
+            OnMessageFromBackgroundThread(completion);
+    }
+
     void ViewerApplication::AddImageToControl(IMCodec::ImageSharedPtr image, uint16_t imageSlot, uint16_t totalImages)
     {
         auto bitmapImage = IMUtil::ImageUtil::ConvertImageWithNormalization(image, IMCodec::TexelFormat::I_B8_G8_R8_A8,
@@ -165,7 +177,7 @@ namespace OIV
 
     bool ViewerApplication::LoadFile(LLUtils::native_string_type filePath, IMCodec::PluginTraverseMode loaderFlags)
     {
-        const auto clientSize = fWindow.GetClientSize();
+        const auto clientSize = fWindow.GetWindow().GetClientSize();
         return ProcessImageLoadResult(fImageOpenController->LoadFile(
             filePath, loaderFlags, ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
     }
@@ -265,7 +277,7 @@ namespace OIV
 
         if (fIsTryToLoadInitialFile == true)
         {
-            fWindow.SetVisible(true);
+            std::ignore             = fWindow.GetWindow().SetVisible(true);
             fIsTryToLoadInitialFile = false;
         }
 
@@ -435,9 +447,9 @@ namespace OIV
     {
         if (fIsShuttingDown == false)
         {
-            fEventSync.AddData(static_cast<std::underlying_type_t<InterThreadMessages>>(
-                                   InterThreadMessages::FileChanged),
-                               fileChangedEventArgs);
+            QueueUiCompletion(static_cast<std::underlying_type_t<InterThreadMessages>>(
+                                  InterThreadMessages::FileChanged),
+                              fileChangedEventArgs);
         }
     }
 
@@ -591,7 +603,8 @@ namespace OIV
         textImage->SetImageRenderMode(OIV_Image_Render_mode::IRM_MainImage);
         textImage->SetVisible(true);
         textImage->SetOpacity(1.0);
-        textImage->SetDPI(fCurrentMonitorProperties.dpiX, fCurrentMonitorProperties.dpiY);
+        textImage->SetDPI(static_cast<uint32_t>(std::lround(fCurrentMonitorProperties.contentScale.x * 96.0)),
+                          static_cast<uint32_t>(std::lround(fCurrentMonitorProperties.contentScale.y * 96.0)));
         textImage->SetFontPath(LabelManager::sFontPath);
         textImage->SetFontSize(10);
         textImage->SetOutlineWidth(0);
@@ -716,7 +729,7 @@ namespace OIV
     bool ViewerApplication::LoadFileOrFolder(const LLUtils::native_string_type& filePath,
                                              IMCodec::PluginTraverseMode traverseMode)
     {
-        const auto clientSize = fWindow.GetClientSize();
+        const auto clientSize = fWindow.GetWindow().GetClientSize();
         return ProcessImageLoadResult(fImageOpenController->LoadFileOrFolder(
             filePath, traverseMode, ImageLoadContext{static_cast<int>(clientSize.x), static_cast<int>(clientSize.y)}));
     }
@@ -742,9 +755,9 @@ namespace OIV
                     [&](OIVBaseImageSharedPtr image) -> void
                     {
                         int64_t uniqueValues = PixelHelper::CountUniqueValues(image->GetImage());
-                        fEventSync.AddData(static_cast<std::underlying_type_t<InterThreadMessages>>(
-                                               InterThreadMessages::CountColors),
-                                           CountColorsData{image.get(), uniqueValues});
+                        QueueUiCompletion(static_cast<std::underlying_type_t<InterThreadMessages>>(
+                                              InterThreadMessages::CountColors),
+                                          CountColorsData{image.get(), uniqueValues});
                     },
                     fCountingImageColor);
             }

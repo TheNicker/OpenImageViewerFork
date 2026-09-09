@@ -17,7 +17,7 @@ namespace OIV
         void Draw(ImageControl& owner, const ImageList& imageList);
     };
 
-    ImageControl::ImageControl()
+    ImageControl::ImageControl(LWS::PlatformContext& platform) : fWindow(platform)
     {
         InitializePlatformRendering();
         InitializeEvents();
@@ -32,7 +32,7 @@ namespace OIV
 
     void ImageControl::RefreshScrollInfo()
     {
-        fImageList.SetViewportHeight(GetClientSize().y);
+        fImageList.SetViewportHeight(fWindow.GetClientSize().y);
         RequestRepaint();
     }
 
@@ -69,7 +69,7 @@ namespace OIV
             fImageList.Scroll(wheel->delta < 0 ? 1 : -1);
             return true;
         }
-        if (std::holds_alternative<LWS::EventResize>(eventData))
+        if (std::holds_alternative<LWS::EventClientAreaSizeChanged>(eventData))
         {
             RefreshScrollInfo();
             return true;
@@ -79,30 +79,38 @@ namespace OIV
 
     void ImageControl::NativeState::Draw(ImageControl& owner, const ImageList& imageList)
     {
-        if (!owner.GetVisible())
+        if (!owner.GetWindow().GetVisible())
             return;
 
-        const LWS::Size size = owner.GetClientSize();
-        if (size.x <= 0 || size.y <= 0 || size.x > std::numeric_limits<int>::max() / 4 ||
-            static_cast<size_t>(size.x) > std::numeric_limits<size_t>::max() / 4U / static_cast<size_t>(size.y))
+        const LWS::LogicalSize size = owner.GetWindow().GetClientSize();
+        const auto clientArea       = owner.GetWindow().GetClientAreaSize();
+        if (!clientArea.has_value())
+            return;
+        const LWS::PixelSize framebuffer = clientArea->pixels;
+        if (size.x <= 0 || size.y <= 0 || framebuffer.x <= 0 || framebuffer.y <= 0 ||
+            framebuffer.x > std::numeric_limits<int>::max() / 4 ||
+            static_cast<size_t>(framebuffer.x) >
+                std::numeric_limits<size_t>::max() / 4U / static_cast<size_t>(framebuffer.y))
             return;
 
-        constexpr int thumbnailSize  = 64;
-        constexpr int titleHeight    = 24;
-        constexpr int scrollbarWidth = 8;
+        constexpr int thumbnailSize  = 51;
+        constexpr int titleHeight    = 19;
+        constexpr int scrollbarWidth = 6;
         const int contentWidth       = std::max(0, size.x - scrollbarWidth);
-        const size_t stride          = static_cast<size_t>(size.x) * 4U;
-        frame.resize(stride * static_cast<size_t>(size.y));
+        const size_t stride          = static_cast<size_t>(framebuffer.x) * 4U;
+        frame.resize(stride * static_cast<size_t>(framebuffer.y));
 
         cairo_surface_t* surface = cairo_image_surface_create_for_data(reinterpret_cast<unsigned char*>(frame.data()),
-                                                                       CAIRO_FORMAT_ARGB32, size.x, size.y,
-                                                                       static_cast<int>(stride));
+                                                                       CAIRO_FORMAT_ARGB32, framebuffer.x,
+                                                                       framebuffer.y, static_cast<int>(stride));
         cairo_t* context         = cairo_create(surface);
+        const LWS::ContentScale scale = clientArea->Scale();
+        cairo_scale(context, scale.x, scale.y);
         cairo_set_source_rgb(context, 0.96, 0.97, 0.92);
         cairo_paint(context);
 
         PangoLayout* layout        = pango_cairo_create_layout(context);
-        PangoFontDescription* font = pango_font_description_from_string("sans-serif 10");
+        PangoFontDescription* font = pango_font_description_from_string("sans-serif 8");
         pango_layout_set_font_description(layout, font);
         pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
         pango_layout_set_width(layout,
@@ -129,7 +137,7 @@ namespace OIV
             const double textColor = selected ? 1.0 : 0.0;
             cairo_set_source_rgb(context, textColor, textColor, textColor);
             pango_layout_set_text(layout, image.title.c_str(), static_cast<int>(image.title.size()));
-            cairo_move_to(context, 0, topLeft.y + 4);
+            cairo_move_to(context, 0, topLeft.y + 3);
             pango_cairo_show_layout(context, layout);
 
             if (image.bitmap != nullptr)
@@ -155,7 +163,7 @@ namespace OIV
         const size_t displayed = imageList.GetNumberOfDisplayedElements();
         if (displayed < imageList.GetNumberOfElements())
         {
-            constexpr int minimumThumbHeight = 20;
+            constexpr int minimumThumbHeight = 16;
             const int thumbHeight            = std::max(minimumThumbHeight,
                                                         static_cast<int>(static_cast<size_t>(size.y) * displayed /
                                                                          imageList.GetNumberOfElements()));
@@ -175,12 +183,12 @@ namespace OIV
         cairo_surface_flush(surface);
         cairo_surface_destroy(surface);
 
-        std::ignore = owner.PresentBitmap({
+        std::ignore = owner.GetWindow().PresentBitmap({
             .pixels   = frame,
             .format   = LWS::BitmapPixelFormat::Bgra8Premultiplied,
             .rowOrder = LWS::BitmapRowOrder::TopDown,
-            .width    = static_cast<uint32_t>(size.x),
-            .height   = static_cast<uint32_t>(size.y),
+            .width    = static_cast<uint32_t>(framebuffer.x),
+            .height   = static_cast<uint32_t>(framebuffer.y),
             .rowPitch = static_cast<uint32_t>(stride),
         });
     }

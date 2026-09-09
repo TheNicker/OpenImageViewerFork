@@ -61,7 +61,7 @@ namespace OIV
         bool fAutoScrolling                   = false;
         LLUtils::PointI32 fAutoScrollPosition = 0;
         LLUtils::StopWatch fAutoScrollStopWatch;
-        LWS::HighPrecisionTimer fTimer = LWS::HighPrecisionTimer(std::bind(&AutoScroll::OnScroll, this));
+        LWS::HighPrecisionTimer fTimer;
         CreateParams fCreateParams{};
 
 #pragma endregion

@@ -6,7 +6,6 @@ target_sources(OIViewer PRIVATE
     ContextMenuBackend.cpp
     CopyDataProtocol.h
     EntryPoint.cpp
-    EventSync.cpp
     ExceptionHandler.cpp
     ExceptionHandler.h
     FileWatcherWin32.h
