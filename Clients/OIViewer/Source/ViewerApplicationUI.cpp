@@ -287,20 +287,9 @@ namespace OIV
         fDPIadjustmentFactor = {params.monitorDesc.contentScale.x, params.monitorDesc.contentScale.y};
     }
 
-    void ViewerApplication::ProbeForMonitorChange()
-    {
-        if (fIsFirstFrameDisplayed == true)
-            fMonitorProvider.UpdateFromWindow(fWindow.GetWindow());
-    }
-
     void ViewerApplication::PerformRefresh()
     {
         using namespace std::chrono;
-
-        if (EnableFrameLimiter == true)
-        {
-            ProbeForMonitorChange();
-        }
 
         const high_resolution_clock::time_point now = high_resolution_clock::now();
         const auto decision = FrameLimiterPolicy::Decide(EnableFrameLimiter, fRefreshTimer.GetEnabled(),

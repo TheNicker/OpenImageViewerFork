@@ -128,6 +128,7 @@ namespace OIV
         if (fWindow.Create(windowConfig) != LWS::Result::Success)
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to create the main window");
         std::ignore = fWindow.GetWindow().Center(LWS::CenterTarget::PrimaryMonitor);
+        fMonitorProvider.UpdateFromWindow(fWindow.GetWindow());
 #ifdef LWS_HAS_WIN32_BACKEND
         std::ignore = LWS::Win32::SetMenuChar(fWindow.GetWindow(), false);
 #endif

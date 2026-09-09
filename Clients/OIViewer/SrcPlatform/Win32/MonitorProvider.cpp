@@ -10,15 +10,23 @@ namespace OIV
 {
     void MonitorProvider::UpdateFromWindow(LWS::Window& window)
     {
-        const HMONITOR monitor        = MonitorFromWindow(*LWS::Win32::GetHwnd(window), 0);
-        const uintptr_t monitorHandle = reinterpret_cast<uintptr_t>(monitor);
-        if (monitorHandle != fMonitorDesc.handle)
+        const HMONITOR monitor = MonitorFromWindow(*LWS::Win32::GetHwnd(window), MONITOR_DEFAULTTONULL);
+        if (monitor != nullptr)
         {
-            auto& platform = window.GetPlatformContext();
-            std::ignore    = platform.RefreshMonitors();
-            fMonitorDesc   = *platform.GetMonitorInfo(monitorHandle);
-            const EventManager::MonitorChangeEventParams args{.monitorDesc = fMonitorDesc};
-            EventManager::GetSingleton().MonitorChange.Raise(args);
+            const uintptr_t monitorHandle = reinterpret_cast<uintptr_t>(monitor);
+            if (monitorHandle != fMonitorDesc.handle)
+            {
+                auto& platform = window.GetPlatformContext();
+                // LWS initializes this cache before window events. Future hot-plug support should refresh it from
+                // WM_DISPLAYCHANGE, never from window-move handling.
+                const auto monitorDesc = platform.GetMonitorInfo(monitorHandle, false);
+                if (monitorDesc.has_value() && monitorDesc->handle == monitorHandle)
+                {
+                    fMonitorDesc = *monitorDesc;
+                    const EventManager::MonitorChangeEventParams args{.monitorDesc = fMonitorDesc};
+                    EventManager::GetSingleton().MonitorChange.Raise(args);
+                }
+            }
         }
     }
 }  // namespace OIV
