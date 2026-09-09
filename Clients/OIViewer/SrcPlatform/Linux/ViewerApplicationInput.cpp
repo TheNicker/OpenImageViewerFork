@@ -43,15 +43,14 @@ namespace OIV
 
     std::intptr_t ViewerApplication::ClientWindwMessage(const LWS::AnyEvent& eventData)
     {
-        constexpr uint8_t PointerDeviceId = 0;
         if (const auto* button = std::get_if<LWS::EventMouseButton>(&eventData))
         {
-            fMouseInput->SetButton(PointerDeviceId, button->button, button->pressed, true);
+            fMouseInput->SetButton(button->button, button->pressed, true);
             return 1;
         }
         if (const auto* motion = std::get_if<LWS::EventMouseMove>(&eventData))
         {
-            fMouseInput->Move(PointerDeviceId, motion->delta);
+            fMouseInput->Move(motion->delta);
             UpdateTexelPos();
             return 1;
         }
