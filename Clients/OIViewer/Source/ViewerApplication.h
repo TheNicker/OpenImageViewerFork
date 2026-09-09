@@ -447,7 +447,6 @@ namespace OIV
         ImageState fImageState;
 
         CommandController fCommandController;
-        std::unique_ptr<IViewerRenderPort> fRenderGateway;
         std::unique_ptr<FreeType::FreeTypeConnector> fFreeType;
         LabelManager fLabelManager;
         KeyDoubleTap fDoubleTap;
@@ -501,6 +500,8 @@ namespace OIV
         std::shared_ptr<OIVFileImage> fInitialFile;
 
         ApplicationLog mLogFile{GetLogFilePath(), true};
+        // Disconnect after workers stop and before the log is destroyed.
+        LLUtils::Exception::OnExceptionEventType::Connection fExceptionConnection;
 
         struct MenuItemData
         {
@@ -524,5 +525,7 @@ namespace OIV
         ImageResidencyCache fImageResidencyCache;
         std::unique_ptr<IFileWatcher> fFileWatcher;
         std::unique_ptr<BrowseSessionController> fBrowseSessionController;
+        LWS::EventListenerGuard fWindowListener;
+        LWS::EventListenerGuard fCanvasListener;
     };
 }  // namespace OIV

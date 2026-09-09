@@ -21,7 +21,10 @@ namespace OIV
             fEventConnection = std::move(*connection);
     }
 
-    MainWindow::~MainWindow() = default;
+    MainWindow::~MainWindow()
+    {
+        Destroy();
+    }
 
     bool MainWindow::UseMainWindowAsCanvas() const
     {

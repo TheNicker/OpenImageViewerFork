@@ -1,5 +1,7 @@
 #include "ViewerApplication.h"
 
+#include <LWS/Platform.hpp>
+
 #include "ViewerApplicationPlatformState.h"
 #include "ViewerMouseInput.h"
 
@@ -87,7 +89,10 @@ namespace OIV
             return handleKeyInput(eventData);
 
         if (std::holds_alternative<LWS::EventCloseRequested>(eventData))
+		{
             CloseApplication(false);
+			return true;
+		|
         else if (std::holds_alternative<LWS::EventFocusGained>(eventData))
             SetAppActive(true);
         else if (std::holds_alternative<LWS::EventFocusLost>(eventData))

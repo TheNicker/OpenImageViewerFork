@@ -3,6 +3,8 @@
 #include <Interfaces/IRenderer.h>
 #include "ImageManager.h"
 #include "Resampler.h"
+#include <mutex>
+#include <LLUtils/Exception.h>
 #include <set>
 #include <ImageUtil/AxisAlignedTransform.h>
 
@@ -111,6 +113,9 @@ namespace OIV
         OIV_CMD_RegisterCallbacks_Request fCallBacks = {};
         Resampler fResampler;
         std::vector<IRenderable*> fPendingRenderables;
+        std::mutex fMutex;
+        bool fIsInitialized = false;
+        LLUtils::Exception::OnExceptionEventType::Connection fExceptionConnection;
 #pragma endregion
     };
 }  // namespace OIV

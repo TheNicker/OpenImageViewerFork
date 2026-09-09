@@ -16,6 +16,9 @@ namespace OIV
     {
         fUiLifetime.reset();
         fIsShuttingDown = true;
+        fIsShuttingDown = true;
+        fRefreshTimer.Enable(false);
+        std::ignore     = LWS::Win32::SetPlatformCallback(fWindow, {});
         if (fCountingColorsThread.joinable())
             fCountingColorsThread.join();
     }

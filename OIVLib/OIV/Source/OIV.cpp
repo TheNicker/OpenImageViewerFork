@@ -15,6 +15,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <mutex>
 #include <stdexcept>
 
 #if OIV_BUILD_RENDERER_D3D11 == 1
@@ -403,7 +404,8 @@ namespace OIV
 
     ResultCode OIV::AddRenderable(IRenderable* renderable)
     {
-        if (fRenderer != nullptr)
+        std::lock_guard<std::mutex> lock(fMutex);
+        if (fIsInitialized)
             fRenderer->AddRenderable(renderable);
         else
             fPendingRenderables.push_back(renderable);
@@ -412,7 +414,8 @@ namespace OIV
     }
     ResultCode OIV::RemoveRenderable(IRenderable* renderable)
     {
-        if (fRenderer != nullptr)
+        std::lock_guard<std::mutex> lock(fMutex);
+        if (fIsInitialized)
             fRenderer->RemoveRenderable(renderable);
         else
             fPendingRenderables.erase(std::find(fPendingRenderables.begin(), fPendingRenderables.end(), renderable));
@@ -544,7 +547,7 @@ namespace OIV
         static_assert(OIV_TexelFormat::TF_COUNT == static_cast<OIV_TexelFormat>(IMCodec::TexelFormat::COUNT),
                       "Wrong array size");
 
-        LLUtils::Exception::OnException.Add(
+        fExceptionConnection = LLUtils::Exception::OnException.Connect(
             [this](LLUtils::Exception::EventArgs args)
             {
                 if (fCallBacks.OnException != nullptr)
@@ -561,10 +564,6 @@ namespace OIV
             });
 
         fRenderer = CreateBestRenderer();
-        for (const auto renderable : fPendingRenderables)
-            fRenderer->AddRenderable(renderable);
-
-        fPendingRenderables.clear();
 
         const auto initializeRenderer = [&]()
         {
@@ -598,6 +597,13 @@ namespace OIV
         initializeRenderer();
 #endif
 
+        {
+            std::lock_guard<std::mutex> lock(fMutex);
+            for (const auto renderable : fPendingRenderables)
+                fRenderer->AddRenderable(renderable);
+            fPendingRenderables.clear();
+            fIsInitialized = true;
+        }
         return 0;
     }
 

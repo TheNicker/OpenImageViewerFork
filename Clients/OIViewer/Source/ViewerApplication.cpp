@@ -203,6 +203,9 @@ namespace OIV
         fMessageManager = std::make_unique<MessageManager>(fWindow.GetWindow(), &fLabelManager, 5,
                                                            [&]() -> void { fRefreshOperation.Queue(); });
 
+        // Stop LWS buffer attachments before the renderer takes ownership of the canvas. On Wayland,
+        // a background buffer committed after Vulkan enables explicit sync has no acquire/release points.
+        fWindow.GetCanvasWindow().SetEraseBackground(false);
         InitializeRenderer();
 
         // Update oiv lib client size

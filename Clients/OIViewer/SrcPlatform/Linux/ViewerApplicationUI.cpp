@@ -11,6 +11,7 @@ namespace OIV
     {
         fUiLifetime.reset();
         fIsShuttingDown = true;
+        fRefreshTimer.Enable(false);
         if (fCountingColorsThread.joinable())
             fCountingColorsThread.join();
     }

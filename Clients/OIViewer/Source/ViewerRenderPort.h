@@ -43,8 +43,15 @@ namespace OIV
         {
         }
 
+        ~OivRenderGateway() override
+        {
+            if (fInitializationAttempted)
+                OIVCommands::ExecuteCommand(OIV_CMD_Destroy, &OIVCommands::NullCommand, &OIVCommands::NullCommand);
+        }
+
         void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr) override
         {
+            fInitializationAttempted = true;
             OIVCommands::Init(canvasHandle, nativeDisplay);
         }
 
@@ -107,5 +114,6 @@ namespace OIV
         bool fPresentationReady;
         bool fRefreshPending{};
         std::optional<LWS::ClientAreaSize> fViewportSize;
+        bool fInitializationAttempted{};
     };
 }  // namespace OIV
