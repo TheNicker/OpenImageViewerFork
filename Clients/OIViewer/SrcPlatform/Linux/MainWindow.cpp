@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <LWS/Platform.hpp>
+#include <LWS/Wayland/WindowExtensions.hpp>
 #include <LLUtils/Exception.h>
 
 namespace OIV
@@ -36,7 +37,10 @@ namespace OIV
 
     void MainWindow::PrepareImageControlLayout() {}
 
-    void MainWindow::SetApplicationIcon() {}
+    void MainWindow::SetApplicationIcon()
+    {
+        std::ignore = LWS::Wayland::SetAppId(fWindow, "io.github.openimageviewer.OpenImageViewer");
+    }
     void MainWindow::UpdateNativeStatusBar([[maybe_unused]] LWS::LogicalSize& canvasSize) {}
 
     void MainWindow::SetStatusBarText([[maybe_unused]] LLUtils::native_string_type message, [[maybe_unused]] int part,
