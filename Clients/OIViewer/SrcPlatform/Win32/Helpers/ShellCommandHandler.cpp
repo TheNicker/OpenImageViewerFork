@@ -3,16 +3,30 @@
 #include "PhotoshopFinder.h"
 
 #include <Windows.h>
+#include <ShlObj.h>
 
-#include <LWS/Platform.hpp>
 #include <LLUtils/PlatformUtility.h>
 #include <LLUtils/StringUtility.h>
 
 #include <limits>
+#include <filesystem>
 #include <sstream>
 
 namespace OIV
 {
+    namespace
+    {
+        bool RevealInFileExplorer(const std::filesystem::path& path)
+        {
+            PIDLIST_ABSOLUTE item = ILCreateFromPathW(path.c_str());
+            if (item == nullptr)
+                return false;
+            const HRESULT result = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
+            ILFree(item);
+            return SUCCEEDED(result);
+        }
+    }  // namespace
+
     LLUtils::native_string_type ShellCommandHandler::Execute(const CommandManager::CommandRequest& request,
                                                              const LLUtils::native_string_type& openedFileName,
                                                              OIVBaseImageSharedPtr openedImage)
@@ -56,7 +70,8 @@ namespace OIV
         else if (command == "containingFolder")
         {
             if (openedFileName.empty() == false)
-                LWS::Platform::browseToFile(openedFileName);
+                if (!RevealInFileExplorer(openedFileName))
+                    result = LLUTILS_TEXT("Unable to reveal the file");
         }
         else if (command == "openWith")
         {
