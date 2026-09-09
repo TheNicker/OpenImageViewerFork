@@ -1,8 +1,8 @@
-#include <LLUtils/StringDefs.h>
 #include "OIV.h"
-#include <exif.h>
 #include "Interfaces/IRenderer.h"
 #include "NullRenderer.h"
+#include <LLUtils/StringDefs.h>
+#include <exif.h>
 
 #include <ImageUtil/ImageUtil.h>
 #include "Configuration.h"
@@ -11,8 +11,11 @@
 #include <Version.h>
 #include "Interfaces/IRendererDefs.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <stdexcept>
 
 #if OIV_BUILD_RENDERER_D3D11 == 1
     #include <OIVD3D11RendererFactory.h>
@@ -22,8 +25,25 @@
     #include <OIVGLRendererFactory.h>
 #endif
 
+#if OIV_BUILD_RENDERER_VK == 1
+    #include <OIVVKRendererFactory.h>
+#endif
+
 namespace OIV
 {
+    std::string OIV::sPreferredRenderer;
+    int OIV::sPreferredGPUIndex = -1;
+
+    void OIV::SetPreferredRenderer(const char* name)
+    {
+        sPreferredRenderer = name ? name : "";
+    }
+
+    void OIV::SetPreferredGPUIndex(int index)
+    {
+        sPreferredGPUIndex = index;
+    }
+
     namespace
     {
         OIVString GetRendererDataRoot()
@@ -42,14 +62,6 @@ namespace OIV
             return LLUtils::StringUtility::ConvertString<OIVString>((root / "OIV").native());
         }
 
-        constexpr const OIVCHAR* RendererName()
-        {
-#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32 && OIV_BUILD_RENDERER_D3D11 == 1
-            return OIV_TEXT("D3D11");
-#else
-            return OIV_TEXT("OpenGL");
-#endif
-        }
     }  // namespace
 
     IRenderer* OIV::GetRenderer()
@@ -100,11 +112,53 @@ namespace OIV
 
     IRendererSharedPtr OIV::CreateBestRenderer()
     {
-// use Direct3D11 for window and opengl for every other platfotm.
+        if (!sPreferredRenderer.empty())
+        {
+            std::string pref = sPreferredRenderer;
+            std::transform(pref.begin(), pref.end(), pref.begin(),
+                           [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+
+            if (pref == "vulkan")
+            {
+#if OIV_BUILD_RENDERER_VK == 1
+                return VKRendererFactory::Create();
+#else
+                throw std::runtime_error("Vulkan renderer not compiled in");
+#endif
+            }
+            else if (pref == "opengl" || pref == "gl")
+            {
+#if OIV_BUILD_RENDERER_GL == 1
+                return GLRendererFactory::Create();
+#else
+                throw std::runtime_error("OpenGL renderer not compiled in");
+#endif
+            }
+            else if (pref == "d3d11" || pref == "direct3d11" || pref == "directx")
+            {
+#if OIV_BUILD_RENDERER_D3D11 == 1
+                return D3D11RendererFactory::Create();
+#else
+                throw std::runtime_error("D3D11 renderer not compiled in");
+#endif
+            }
+            else if (pref == "null")
+            {
+#if OIV_ALLOW_NULL_RENDERER == 1
+                return IRendererSharedPtr(new NullRenderer());
+#else
+                throw std::runtime_error("Null renderer not available");
+#endif
+            }
+
+            throw std::invalid_argument("Unknown renderer: " + sPreferredRenderer);
+        }
+
 #if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
     #if OIV_BUILD_RENDERER_D3D11 == 1
-        // Prefer Direct3D11 for windows.
         return D3D11RendererFactory::Create();
+    #elif OIV_BUILD_RENDERER_VK == 1
+        return VKRendererFactory::Create();
     #elif OIV_BUILD_RENDERER_GL == 1
         return GLRendererFactory::Create();
     #elif OIV_ALLOW_NULL_RENDERER == 1
@@ -113,8 +167,9 @@ namespace OIV
         #error No valid Renderers detected.
     #endif
 #else
-        // If no windows choose GL renderer
-    #if OIV_BUILD_RENDERER_GL == 1
+    #if OIV_BUILD_RENDERER_VK == 1
+        return VKRendererFactory::Create();
+    #elif OIV_BUILD_RENDERER_GL == 1
         return GLRendererFactory::Create();
     #elif OIV_ALLOW_NULL_RENDERER == 1
         return IRendererSharedPtr(new NullRenderer());
@@ -122,8 +177,6 @@ namespace OIV
         #error No valid Renderers detected.
     #endif
 #endif
-
-        LL_EXCEPTION(LLUtils::Exception::ErrorCode::BadParameters, "Bad build configuration");
     }
 
     IMCodec::ImageSharedPtr OIV::Resample(IMCodec::ImageSharedPtr sourceImage, LLUtils::PointI32 targetSize)
@@ -513,16 +566,38 @@ namespace OIV
 
         fPendingRenderables.clear();
 
-        OIV_RendererInitializationParams params = {};
+        const auto initializeRenderer = [&]()
+        {
+            OIV_RendererInitializationParams params{};
+            const OIVString rendererName = LLUtils::StringUtility::ConvertString<OIVString>(
+                std::string(fRenderer->GetBackendName()));
+            const OIVString appDataPath = GetRendererDataRoot() + OIV_TEXT("/") +
+                                          LLUtils::StringUtility::ConvertString<OIVString>(
+                                              FormatFullVersion(CurrentVersion)) +
+                                          OIV_TEXT("/Renderer/") + rendererName + OIV_TEXT("/.");
+            params.container            = fParent;
+            params.nativeDisplay        = fNativeDisplay;
+            params.dataPath             = appDataPath.c_str();
+            params.gpuIndex             = sPreferredGPUIndex;
+            fRenderer->Init(params);
+        };
 
-        OIVString appDataPath = GetRendererDataRoot() + OIV_TEXT("/") +
-                                LLUtils::StringUtility::ConvertString<OIVString>(FormatFullVersion(CurrentVersion)) +
-                                OIV_TEXT("/Renderer/") + RendererName() + OIV_TEXT("/.");
-        params.container     = fParent;
-        params.nativeDisplay = fNativeDisplay;
+#if defined(__linux__) && OIV_BUILD_RENDERER_VK == 1 && OIV_BUILD_RENDERER_GL == 1
+        try
+        {
+            initializeRenderer();
+        }
+        catch (...)
+        {
+            if (!sPreferredRenderer.empty())
+                throw;
+            fRenderer = GLRendererFactory::Create();
+            initializeRenderer();
+        }
+#else
+        initializeRenderer();
+#endif
 
-        params.dataPath = appDataPath.c_str();
-        fRenderer->Init(params);
         return 0;
     }
 

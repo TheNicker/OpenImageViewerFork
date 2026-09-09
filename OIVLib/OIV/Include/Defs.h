@@ -145,6 +145,7 @@ typedef wchar_t OIVCHAR;
         size_t container;
         void* nativeDisplay;
         const OIVCHAR* dataPath;
+        int gpuIndex;
     };
 
     struct OIV_RECT_I

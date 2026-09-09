@@ -10,6 +10,7 @@
 #include <shellapi.h>
 
 #include <cstdlib>
+#include <exception>
 
 namespace
 {
@@ -52,6 +53,11 @@ namespace
         }
         catch (const LLUtils::Exception&)
         {
+            return EXIT_FAILURE;
+        }
+        catch (const std::exception& exception)
+        {
+            LL_EXCEPTION_DONT_THROW(LLUtils::Exception::ErrorCode::BadParameters, exception.what());
             return EXIT_FAILURE;
         }
         catch (...)

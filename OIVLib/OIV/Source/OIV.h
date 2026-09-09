@@ -36,6 +36,9 @@ namespace OIV
         IRenderer* GetRenderer() override;
         ResultCode SetBackgroundColor(int index, LLUtils::Color backgroundColor) override;
 
+        static void SetPreferredRenderer(const char* name);
+        static void SetPreferredGPUIndex(int index);
+
         int Init() override;
         int SetParent(std::size_t handle, void* nativeDisplay) override;
         int Refresh() override;
@@ -62,6 +65,9 @@ namespace OIV
 #pragma region //-------------Private member fields------------------
 
     private:
+
+        static std::string sPreferredRenderer;
+        static int sPreferredGPUIndex;
 
         static constexpr std::array<uint8_t, 6> sShades
         {
