@@ -68,12 +68,12 @@ namespace OIV
             canvasSize.x -= imageListWidth;
 
         UpdateNativeStatusBar(canvasSize);
-        if (!fUseMainWindowAsCanvas && canvasSize.x > 0 && canvasSize.y > 0)
+        if (!fUseMainWindowAsCanvas)
             std::ignore = fCanvasWindow.SetPlacement({.position = LWS::Point{0, 0}, .clientSize = canvasSize});
 
         if (fImageControl.GetWindow().IsCreated())
         {
-            if (fShowImageControl && canvasSize.y > 0)
+            if (fShowImageControl)
                 std::ignore = fImageControl.GetWindow().SetPlacement(
                     {.position   = LWS::Point{canvasSize.x, 0},
                      .clientSize = {GetImageControlClientWidth(imageListWidth), canvasSize.y}});
