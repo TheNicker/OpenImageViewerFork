@@ -64,10 +64,9 @@ namespace OIV
     void ViewerApplication::InitializeRenderer()
     {
         const auto canvasHandle = LWS::Win32::GetHwnd(fWindow.GetCanvasWindow());
-        const auto clientArea   = fWindow.GetCanvasWindow().GetClientAreaSize();
-        if (!canvasHandle.has_value() || !clientArea.has_value())
+        if (!canvasHandle.has_value())
             LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to obtain the canvas window handle");
-        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*canvasHandle), *clientArea);
+        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*canvasHandle));
     }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(LWS::NotificationIconGroup::IconID iconId) const
