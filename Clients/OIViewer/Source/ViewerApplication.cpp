@@ -205,7 +205,7 @@ namespace OIV
 
         // Stop LWS buffer attachments before the renderer takes ownership of the canvas. On Wayland,
         // a background buffer committed after Vulkan enables explicit sync has no acquire/release points.
-        fWindow.GetCanvasWindow().SetEraseBackground(false);
+        std::ignore = fWindow.GetCanvasWindow().SetEraseBackground(false);
         InitializeRenderer();
 
         // Update oiv lib client size
@@ -347,9 +347,6 @@ namespace OIV
 
         fWindow.GetImageControl().GetImageList().ImageSelectionChanged.Add(
             std::bind(&ViewerApplication::OnImageSelectionChanged, this, std::placeholders::_1));
-
-        // renderer took over on the window, no need to erase background.
-        std::ignore = fWindow.GetCanvasWindow().SetEraseBackground(false);
 
         std::ignore = fContextMenuTimer.SetTargetWindow(&fWindow.GetWindow());
         fContextMenuTimer.SetCallback(MakeSafeCallback([this]() { OnContextMenuTimer(); }));

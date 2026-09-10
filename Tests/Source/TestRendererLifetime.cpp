@@ -70,3 +70,19 @@ TEST_CASE("Renderer shutdown disconnects its global exception subscription", "[r
     LLUtils::Exception::OnException.Raise(LLUtils::Exception::EventArgs{});
     CHECK(callbacks == 1);
 }
+
+TEST_CASE("Render gateway forwards zero extents and restores the same viewport", "[renderer][lifetime]")
+{
+    ScopedApi api;
+    OIV::OIV::SetPreferredRenderer("null");
+    OIV::OivRenderGateway gateway;
+    gateway.Initialize(0);
+    const auto& renderer = static_cast<const OIV::OIV&>(*OIV::ApiGlobal::sPictureRenderer);
+
+    for (const auto size : {LWS::PixelSize{}, LWS::PixelSize{640, 480}, LWS::PixelSize{}, LWS::PixelSize{640, 480},
+                            LWS::PixelSize{640, 480}})
+    {
+        REQUIRE(gateway.SetViewportSize(size) == RC_Success);
+        REQUIRE(renderer.GetClientSize() == LLUtils::PointI32{size.x, size.y});
+    }
+}

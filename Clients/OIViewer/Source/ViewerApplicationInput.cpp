@@ -60,6 +60,28 @@ namespace OIV
         return true;
     }
 
+    bool ViewerApplication::HandleMessages(const LWS::AnyEvent& eventData)
+    {
+        bool handled = true;
+        if (std::holds_alternative<LWS::EventCloseRequested>(eventData))
+        {
+            // Suppress native destruction until the renderer and its images have been released.
+            CloseApplication(false);
+        }
+        else if (std::holds_alternative<LWS::EventShowStateChanged>(eventData))
+        {
+            // Minimizing a parent need not resize its child canvas in LWS.
+            fRefreshOperation.Begin();
+            UpdateWindowSize();
+            fRefreshOperation.End();
+        }
+        else if (const auto* dragDropEvent = std::get_if<LWS::EventDragDropFile>(&eventData))
+            handled = HandleFileDragDropEvent(*dragDropEvent);
+        else
+            handled = HandleWinMessageEvent(eventData);
+        return handled;
+    }
+
     bool ViewerApplication::HandleClientWindowMessages(const LWS::AnyEvent& eventData)
     {
         return ClientWindwMessage(eventData) != 0;
