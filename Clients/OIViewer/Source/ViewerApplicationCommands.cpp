@@ -1,4 +1,5 @@
 #include <iomanip>
+#include <OIVShared/Utf8.h>
 #include <string>
 #include <filesystem>
 #include <thread>
@@ -289,7 +290,7 @@ namespace OIV
     }
 
     void ViewerApplication::CMD_ShowSystemInfo([[maybe_unused]] const CommandManager::CommandRequest& request,
-                                                [[maybe_unused]] CommandManager::CommandResult& result)
+                                               [[maybe_unused]] CommandManager::CommandResult& result)
     {
         OIVTextImage* text = fLabelManager.GetTextLabel("systemInfo");
         if (text != nullptr)
@@ -301,10 +302,10 @@ namespace OIV
 
         text = fLabelManager.GetOrCreateTextLabel("systemInfo");
 
-        IRenderer* renderer = OIV::ApiGlobal::sPictureRenderer->GetRenderer();
-        const char* backendName = renderer ? renderer->GetBackendName() : "Unknown";
-        const char* gpuName = renderer ? renderer->GetGPUName() : "Unknown";
-        const char* apiVersion = renderer ? renderer->GetAPIVersion() : "Unknown";
+        IRenderer* renderer       = OIV::ApiGlobal::sPictureRenderer->GetRenderer();
+        const char* backendName   = renderer ? renderer->GetBackendName() : "Unknown";
+        const char* gpuName       = renderer ? renderer->GetGPUName() : "Unknown";
+        const char* apiVersion    = renderer ? renderer->GetAPIVersion() : "Unknown";
         const char* driverVersion = renderer ? renderer->GetDriverVersion() : "Unknown";
 
         LLUtils::native_string_type osName;
@@ -364,7 +365,8 @@ namespace OIV
         auto coresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
         std::ostringstream coresOss;
         coresOss << coresInfo.physicalCores << " physical / " << coresInfo.logicalCores << " logical";
-        LLUtils::native_string_type cpuCores = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(coresOss.str());
+        LLUtils::native_string_type cpuCores = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
+            coresOss.str());
 
 #if defined(NDEBUG)
         LLUtils::native_string_type buildType = LLUTILS_TEXT("Release");
@@ -377,18 +379,10 @@ namespace OIV
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
                 OIV::FormatFullVersion(OIV::CurrentVersion)),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(OIV_GIT_SHORT_HASH)),
-            buildType, LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(backendName)),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(gpuName)),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(apiVersion)),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(driverVersion)), osName,
-            cpuCores);
-
-        int gpuIndex = renderer ? renderer->GetSelectedGPUIndex() : -1;
-        if (gpuIndex >= 0)
-            message += LLUTILS_TEXT("\nAdapter index: ") +
-                       LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::to_string(gpuIndex));
-        else
-            message += LLUTILS_TEXT("\nAdapter index: Not reported");
+            buildType, DecodeUtf8(backendName), DecodeUtf8(gpuName), renderer ? renderer->GetSelectedGPUIndex() : -1,
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
+                std::string(GetAccelerationName(renderer ? renderer->GetAcceleration() : Acceleration::Unknown))),
+            DecodeUtf8(apiVersion), DecodeUtf8(driverVersion), osName, cpuCores);
 
         text->SetText(message);
         text->SetBackgroundColor({0, 0, 0, 216});

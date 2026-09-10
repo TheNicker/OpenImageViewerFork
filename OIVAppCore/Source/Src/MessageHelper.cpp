@@ -88,16 +88,13 @@ namespace OIV
         return message;
     }
 
-    LLUtils::native_string_type MessageHelper::CreateSystemInfoMessage(const LLUtils::native_string_type& appName,
-                                                                       const LLUtils::native_string_type& appVersion,
-                                                                       const LLUtils::native_string_type& gitHash,
-                                                                       const LLUtils::native_string_type& buildType,
-                                                                       const LLUtils::native_string_type& backendName,
-                                                                       const LLUtils::native_string_type& gpuName,
-                                                                       const LLUtils::native_string_type& apiVersion,
-                                                                       const LLUtils::native_string_type& driverVersion,
-                                                                       const LLUtils::native_string_type& osName,
-                                                                       const LLUtils::native_string_type& cpuCores)
+    LLUtils::native_string_type MessageHelper::CreateSystemInfoMessage(
+        const LLUtils::native_string_type& appName, const LLUtils::native_string_type& appVersion,
+        const LLUtils::native_string_type& gitHash, const LLUtils::native_string_type& buildType,
+        const LLUtils::native_string_type& backendName, const LLUtils::native_string_type& gpuName, int adapterIndex,
+        const LLUtils::native_string_type& acceleration, const LLUtils::native_string_type& apiVersion,
+        const LLUtils::native_string_type& driverVersion, const LLUtils::native_string_type& osName,
+        const LLUtils::native_string_type& cpuCores)
     {
         LLUtils::native_string_type message = MessageFormatter::DefaultHeaderColor +
                                               LLUTILS_TEXT("System information\n");
@@ -111,6 +108,9 @@ namespace OIV
         args.spaceBetweenColumns                        = 3;
         MessageFormatter::MessagesValues& messageValues = args.messageValues;
 
+        const auto indexText = adapterIndex < 0 ? LLUtils::native_string_type{}
+                                                : LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
+                                                      std::to_string(adapterIndex));
         // One value per labeled row: the formatter's columns concatenate within a row.
         for (const auto& [label, value] :
              std::initializer_list<std::pair<const char*, const LLUtils::native_string_type*>>{
@@ -122,6 +122,8 @@ namespace OIV
                  {"CPU cores", &cpuCores},
                  {"Renderer", &backendName},
                  {"Adapter", &gpuName},
+                 {"Adapter index", &indexText},
+                 {"Acceleration", &acceleration},
                  {"API version", &apiVersion},
                  {"Driver version", &driverVersion}})
         {

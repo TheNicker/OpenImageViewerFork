@@ -17,17 +17,7 @@
 #include <mutex>
 #include <stdexcept>
 
-#if OIV_BUILD_RENDERER_D3D11 == 1
-    #include <OIVD3D11RendererFactory.h>
-#endif
-
-#if OIV_BUILD_RENDERER_GL == 1
-    #include <OIVGLRendererFactory.h>
-#endif
-
-#if OIV_BUILD_RENDERER_VK == 1
-    #include <OIVVKRendererFactory.h>
-#endif
+#include "RendererSelection.h"
 
 namespace OIV
 {
@@ -97,103 +87,6 @@ namespace OIV
         return rotation;
     }
 
-    static const char* GetRendererName(RendererType renderer)
-    {
-        switch (renderer)
-        {
-            case RendererType::OpenGL:
-                return "GL";
-            case RendererType::D3D11:
-                return "D3D11";
-            case RendererType::Vulkan:
-                return "Vulkan";
-            case RendererType::Null:
-                return "Null";
-        }
-        return "Unknown";
-    }
-
-    bool IsRendererAvailable(RendererType renderer)
-    {
-        switch (renderer)
-        {
-#if OIV_BUILD_RENDERER_D3D11 == 1
-            case RendererType::D3D11:
-                return true;
-#endif
-#if OIV_BUILD_RENDERER_VK == 1
-            case RendererType::Vulkan:
-                return true;
-#endif
-#if OIV_BUILD_RENDERER_GL == 1
-            case RendererType::OpenGL:
-                return true;
-#endif
-#if OIV_ALLOW_NULL_RENDERER == 1
-            case RendererType::Null:
-                return true;
-#endif
-            default:
-                return false;
-        }
-    }
-
-    RendererType GetDefaultRenderer()
-    {
-#if defined(_WIN32) && OIV_BUILD_RENDERER_D3D11 == 1
-        return RendererType::D3D11;
-#elif OIV_BUILD_RENDERER_VK == 1
-        return RendererType::Vulkan;
-#elif OIV_BUILD_RENDERER_GL == 1
-        return RendererType::OpenGL;
-#else
-        return RendererType::Null;
-#endif
-    }
-
-    std::string ValidateRendererOptions(const RendererOptions& options)
-    {
-        const auto renderer = options.renderer.value_or(GetDefaultRenderer());
-        std::string error;
-        if (!IsRendererAvailable(renderer))
-            error = std::string(GetRendererName(renderer)) + " renderer is not available in this build";
-        else if (options.adapter && options.adapterIndex)
-            error = "--adapter and --adapter_index are mutually exclusive";
-        else if (options.adapter && options.adapter->empty())
-            error = "--adapter requires a nonempty adapter name";
-        else if (options.adapterIndex && *options.adapterIndex < 0)
-            error = "--adapter_index must be nonnegative";
-        else if ((options.adapter || options.adapterIndex) &&
-                 (renderer == RendererType::OpenGL || renderer == RendererType::Null))
-            error = "Explicit adapter selection requires D3D11 or Vulkan; GL uses the platform-selected adapter";
-        return error;
-    }
-
-    IRendererSharedPtr OIV::CreateRenderer(RendererType renderer)
-    {
-        switch (renderer)
-        {
-#if OIV_BUILD_RENDERER_D3D11 == 1
-            case RendererType::D3D11:
-                return D3D11RendererFactory::Create();
-#endif
-#if OIV_BUILD_RENDERER_VK == 1
-            case RendererType::Vulkan:
-                return VKRendererFactory::Create();
-#endif
-#if OIV_BUILD_RENDERER_GL == 1
-            case RendererType::OpenGL:
-                return GLRendererFactory::Create();
-#endif
-#if OIV_ALLOW_NULL_RENDERER == 1
-            case RendererType::Null:
-                return std::make_shared<NullRenderer>();
-#endif
-            default:
-                LL_EXCEPTION(LLUtils::Exception::ErrorCode::BadParameters, "Requested renderer is not available");
-        }
-    }
-
     IMCodec::ImageSharedPtr OIV::Resample(IMCodec::ImageSharedPtr sourceImage, LLUtils::PointI32 targetSize)
     {
         const uint32_t width  = targetSize.x;
@@ -250,7 +143,7 @@ namespace OIV
         //		easyexif::EXIFInfo exifInfo;
         //		if (flags & OIV_CMD_LoadFile_Flags::Load_Exif_Data
         //			&& exifInfo.parseFrom(static_cast<const unsigned char*>(buffer), static_cast<unsigned int>(size)) ==
-        //PARSE_EXIF_SUCCESS) 			exifOrientation = exifInfo.Orientation;
+        // PARSE_EXIF_SUCCESS) 			exifOrientation = exifInfo.Orientation;
 
         //		if (exifOrientation != 0)
         //		{
@@ -258,9 +151,9 @@ namespace OIV
         //			const_cast<ItemMetaData&>(image->GetMetaData()).exifData.orientation = exifOrientation;
 
         //			// I see no use of using the original image, discard source image and use the image with exif
-        //rotation applied.
+        // rotation applied.
         //			// If needed, responsibility for exif rotation can be transferred to the user by returning
-        //MetaData.exifOrientation. 			image = ApplyExifRotation(image);
+        // MetaData.exifOrientation. 			image = ApplyExifRotation(image);
 
         //		}
         //		handle = fImageManager.AddImage(image);
@@ -561,6 +454,34 @@ namespace OIV
         static_assert(OIV_TexelFormat::TF_COUNT == static_cast<OIV_TexelFormat>(IMCodec::TexelFormat::COUNT),
                       "Wrong array size");
 
+        if (const auto error = ValidateRendererOptions(options); !error.empty())
+            throw std::invalid_argument(error);
+        OIV_RendererInitializationParams params{};
+        const OIVString dataRoot = GetRendererDataRoot() + OIV_TEXT("/") +
+                                   LLUtils::StringUtility::ConvertString<OIVString>(FormatFullVersion(CurrentVersion)) +
+                                   OIV_TEXT("/Renderer");
+        params.container         = fParent;
+        params.nativeDisplay     = fNativeDisplay;
+        params.dataPath          = dataRoot.c_str();
+#if OIV_ALLOW_NULL_RENDERER
+        if (options.renderer == RendererType::Null)
+        {
+            fRenderer = std::make_shared<NullRenderer>();
+            fRenderer->Init(params);
+        }
+        else
+#endif
+        {
+            // Apply explicit constraints first, then exhaust Hardware, Unknown, and Software
+            // in compiled API order. Selection owns provisional instances; only a successful
+            // renderer receives application images. API switching ends here at startup.
+            // An explicit API forbids cross-API fallback. An index overrides a name, fixes
+            // the device, and binds to the build's default API when none is supplied. Names
+            // survive fallback and select the first usable match in each tier; GL is excluded
+            // when adapter selection is required.
+            fRenderer = SelectRenderer(GetRendererBackends(), options, params);
+        }
+        // Expected candidate failures are collected by startup, without application dialogs.
         fExceptionConnection = LLUtils::Exception::OnException.Connect(
             [this](LLUtils::Exception::EventArgs args)
             {
@@ -576,43 +497,6 @@ namespace OIV
                     fCallBacks.OnException(localArgs, fCallBacks.userPointer);
                 }
             });
-
-        if (const auto error = ValidateRendererOptions(options); !error.empty())
-            throw std::invalid_argument(error);
-        fRenderer = CreateRenderer(options.renderer.value_or(GetDefaultRenderer()));
-
-        const auto initializeRenderer = [&]()
-        {
-            OIV_RendererInitializationParams params{};
-            const OIVString rendererName = LLUtils::StringUtility::ConvertString<OIVString>(
-                std::string(fRenderer->GetBackendName()));
-            const OIVString appDataPath = GetRendererDataRoot() + OIV_TEXT("/") +
-                                          LLUtils::StringUtility::ConvertString<OIVString>(
-                                              FormatFullVersion(CurrentVersion)) +
-                                          OIV_TEXT("/Renderer/") + rendererName + OIV_TEXT("/.");
-            params.container            = fParent;
-            params.nativeDisplay        = fNativeDisplay;
-            params.dataPath             = appDataPath.c_str();
-            params.gpuIndex             = options.adapterIndex.value_or(-1);
-            params.adapterName          = options.adapter ? options.adapter->c_str() : nullptr;
-            fRenderer->Init(params);
-        };
-
-#if defined(__linux__) && OIV_BUILD_RENDERER_VK == 1 && OIV_BUILD_RENDERER_GL == 1
-        try
-        {
-            initializeRenderer();
-        }
-        catch (...)
-        {
-            if (options.renderer || options.adapter || options.adapterIndex)
-                throw;
-            fRenderer = GLRendererFactory::Create();
-            initializeRenderer();
-        }
-#else
-        initializeRenderer();
-#endif
 
         {
             std::lock_guard<std::mutex> lock(fMutex);

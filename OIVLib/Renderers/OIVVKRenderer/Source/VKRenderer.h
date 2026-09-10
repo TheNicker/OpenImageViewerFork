@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include <type_traits>
 
 #include "VKContext.h"
 #include "VKPipeline.h"
@@ -20,6 +22,8 @@ namespace OIV
         VKRenderer();
         ~VKRenderer() override;
 
+        std::vector<RendererAdapter> EnumerateAdapters() override { return VKContext::EnumerateAdapters(); }
+        Acceleration GetAcceleration() const override { return fContext.GetAcceleration(); }
         int Init(const OIV_RendererInitializationParams& initParams) override;
         int SetViewParams(const ViewParameters& viewParams) override;
         int Redraw() override;
@@ -71,6 +75,22 @@ namespace OIV
             alignas(8) float viewportSize[2];
             alignas(16) float selectionRect[4];
         };
+
+        // Mirrors VKImage.shader and QuadSelectionFP.shader's push-constant layout.
+        static_assert(std::is_standard_layout_v<PushConstants> && std::is_standard_layout_v<SelectionPushConstants>);
+        static_assert(alignof(PushConstants) == 16 && sizeof(PushConstants) == 128);
+        static_assert(offsetof(PushConstants, viewportSize) == 0 && offsetof(PushConstants, imageSize) == 8);
+        static_assert(offsetof(PushConstants, imageScale) == 16 && offsetof(PushConstants, imageOffset) == 24);
+        static_assert(offsetof(PushConstants, backgroundColor1) == 32 &&
+                      offsetof(PushConstants, backgroundColor2) == 48);
+        static_assert(offsetof(PushConstants, transparencyColor1) == 64 &&
+                      offsetof(PushConstants, transparencyColor2) == 80);
+        static_assert(offsetof(PushConstants, opacity) == 96 && offsetof(PushConstants, exposure) == 100);
+        static_assert(offsetof(PushConstants, colorOffset) == 104 && offsetof(PushConstants, gamma) == 108);
+        static_assert(offsetof(PushConstants, saturation) == 112 && offsetof(PushConstants, showGrid) == 116);
+        static_assert(alignof(SelectionPushConstants) == 16 && sizeof(SelectionPushConstants) == 32);
+        static_assert(offsetof(SelectionPushConstants, viewportSize) == 0 &&
+                      offsetof(SelectionPushConstants, selectionRect) == 16);
 
         VkDescriptorPool CreateDescriptorPool();
         void AllocateDescriptorSet(ImageEntry& entry);

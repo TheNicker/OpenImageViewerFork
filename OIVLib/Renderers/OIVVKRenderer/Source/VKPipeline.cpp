@@ -81,23 +81,17 @@ namespace OIV
 
     void VKPipeline::CreateDescriptorSetLayout(VkDevice device, bool useTexture)
     {
-        std::vector<VkDescriptorSetLayoutBinding> bindings;
-
-        if (useTexture)
-        {
-            VkDescriptorSetLayoutBinding samplerBinding{};
-            samplerBinding.binding            = 0;
-            samplerBinding.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            samplerBinding.descriptorCount    = 1;
-            samplerBinding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
-            samplerBinding.pImmutableSamplers = nullptr;
-            bindings.push_back(samplerBinding);
-        }
-
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings    = bindings.data();
+        static constexpr VkDescriptorSetLayoutBinding samplerBinding{
+            .binding         = 0,
+            .descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT,
+        };
+        const VkDescriptorSetLayoutCreateInfo layoutInfo{
+            .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = useTexture ? 1u : 0u,
+            .pBindings    = useTexture ? &samplerBinding : nullptr,
+        };
 
         VkDescriptorSetLayout layout;
         VkResult result = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &layout);

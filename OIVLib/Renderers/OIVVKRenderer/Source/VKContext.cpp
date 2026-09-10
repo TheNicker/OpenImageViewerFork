@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-#include <set>
+#include <array>
 #include <stdexcept>
 
 namespace OIV
@@ -19,8 +19,8 @@ namespace OIV
 
     void VKContext::Init(const CreateParams& params)
     {
-        fGpuIndex         = params.gpuIndex;
-        fWindow           = params.window;
+        fGpuIndex = params.gpuIndex;
+        fWindow   = params.window;
 #ifdef __linux__
         fNativeDisplay = params.nativeDisplay;
 #endif
@@ -98,6 +98,9 @@ namespace OIV
 
     void VKContext::CreateInstance()
     {
+#if defined(_WIN32) && !defined(OIV_VK_TEST_DOUBLES)
+        EnsureVulkanRuntime();
+#endif
         VkApplicationInfo appInfo{};
         appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName   = "OIV";
@@ -106,7 +109,7 @@ namespace OIV
         appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion         = VK_API_VERSION_1_1;
 
-        const char* extensions[] = {
+        static constexpr const char* extensions[] = {
             VK_KHR_SURFACE_EXTENSION_NAME,
 #ifdef _WIN32
             VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
@@ -169,6 +172,53 @@ namespace OIV
         fSurface = surface;
     }
 
+    namespace
+    {
+        constexpr Acceleration ClassifyDevice(VkPhysicalDeviceType type)
+        {
+            switch (type)
+            {
+                case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                    return Acceleration::Hardware;
+                case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                    return Acceleration::Software;
+                default:
+                    return Acceleration::Unknown;
+            }
+        }
+    }  // namespace
+
+    std::vector<RendererAdapter> VKContext::EnumerateAdapters()
+    {
+        VKContext probe;
+        probe.CreateInstance();
+        uint32_t count{};
+        CheckVkResult(vkEnumeratePhysicalDevices(probe.fInstance, &count, nullptr),
+                      "Failed to enumerate Vulkan devices");
+        std::vector<VkPhysicalDevice> devices(count);
+        if (count)
+            CheckVkResult(vkEnumeratePhysicalDevices(probe.fInstance, &count, devices.data()),
+                          "Failed to enumerate Vulkan devices");
+        std::vector<RendererAdapter> adapters;
+        adapters.reserve(count);
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(devices[i], &properties);
+            adapters.push_back({static_cast<int>(i), properties.deviceName, properties.vendorID,
+                                ClassifyDevice(properties.deviceType),
+                                properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU});
+        }
+        return adapters;
+    }
+
+    Acceleration VKContext::GetAcceleration() const
+    {
+        return fPhysicalDevice == VK_NULL_HANDLE ? Acceleration::Unknown
+                                                 : ClassifyDevice(GetPhysicalDeviceProperties().deviceType);
+    }
+
     void VKContext::PickPhysicalDevice(const char* adapterName)
     {
         uint32_t deviceCount{0};
@@ -194,7 +244,8 @@ namespace OIV
         {
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(devices[i], &properties);
-            if (adapterName != nullptr && !detail::AdapterNameMatches(adapterName, properties.deviceName))
+            if (fGpuIndex < 0 && adapterName != nullptr &&
+                !detail::AdapterNameMatches(adapterName, properties.deviceName, properties.vendorID))
                 continue;
             // Descriptor pool growth relies on Vulkan 1.1's recoverable out-of-pool result.
             if (properties.apiVersion < VK_API_VERSION_1_1)
@@ -287,32 +338,30 @@ namespace OIV
 
     void VKContext::CreateLogicalDevice()
     {
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = {fGraphicsQueueFamily, fPresentQueueFamily};
-
-        float queuePriority = 1.0f;
-        for (uint32_t queueFamily : uniqueQueueFamilies)
+        std::array<VkDeviceQueueCreateInfo, 2> queueCreateInfos{};
+        const auto firstFamily        = std::min(fGraphicsQueueFamily, fPresentQueueFamily);
+        const auto lastFamily         = std::max(fGraphicsQueueFamily, fPresentQueueFamily);
+        const uint32_t queueCount     = firstFamily == lastFamily ? 1 : 2;
+        constexpr float queuePriority = 1.0f;
+        for (uint32_t i = 0; i < queueCount; ++i)
         {
-            VkDeviceQueueCreateInfo queueCreateInfo{};
-            queueCreateInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount       = 1;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
-            queueCreateInfos.push_back(queueCreateInfo);
+            queueCreateInfos[i] = {
+                .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = i == 0 ? firstFamily : lastFamily,
+                .queueCount       = 1,
+                .pQueuePriorities = &queuePriority,
+            };
         }
-
-        VkPhysicalDeviceFeatures deviceFeatures{};
-
-        VkDeviceCreateInfo createInfo{};
-        createInfo.sType                = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-        createInfo.pQueueCreateInfos    = queueCreateInfos.data();
-        createInfo.pEnabledFeatures     = &deviceFeatures;
-
-        std::vector<const char*> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-        createInfo.enabledExtensionCount   = static_cast<uint32_t>(deviceExtensions.size());
-        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        const VkPhysicalDeviceFeatures deviceFeatures{};
+        static constexpr std::array deviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        const VkDeviceCreateInfo createInfo{
+            .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .queueCreateInfoCount    = queueCount,
+            .pQueueCreateInfos       = queueCreateInfos.data(),
+            .enabledExtensionCount   = static_cast<uint32_t>(deviceExtensions.size()),
+            .ppEnabledExtensionNames = deviceExtensions.data(),
+            .pEnabledFeatures        = &deviceFeatures,
+        };
 
         VkDevice device;
         VkResult result = vkCreateDevice(fPhysicalDevice, &createInfo, nullptr, &device);

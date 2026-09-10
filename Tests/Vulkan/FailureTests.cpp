@@ -77,6 +77,10 @@ namespace
     // Track externally observable ownership/synchronization, including waits that would hang on a real driver.
     struct Driver
     {
+        uint32_t graphicsFamily = 0;
+        uint32_t presentFamily  = 0;
+        std::vector<uint32_t> createdQueueFamilies;
+        std::set<uint32_t> descriptorBindingCounts;
         struct PhysicalDevice
         {
             uint32_t apiVersion{VK_API_VERSION_1_1};
@@ -289,19 +293,33 @@ extern "C"
     VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice, uint32_t* count,
                                                                         VkQueueFamilyProperties* properties)
     {
-        *count = 1;
+        *count = std::max(driver.graphicsFamily, driver.presentFamily) + 1;
         if (properties != nullptr)
-            *properties = {.queueFlags = VK_QUEUE_GRAPHICS_BIT, .queueCount = 1};
+            for (uint32_t i = 0; i < *count; ++i)
+                properties[i] = {.queueFlags = i == driver.graphicsFamily ? VkQueueFlags(VK_QUEUE_GRAPHICS_BIT) : 0u,
+                                 .queueCount = 1};
     }
-    VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice device, uint32_t, VkSurfaceKHR,
-                                                                        VkBool32* supported)
+    VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice device, uint32_t family,
+                                                                        VkSurfaceKHR, VkBool32* supported)
     {
-        *supported = reinterpret_cast<Driver::PhysicalDevice*>(device)->presentSupport ? VK_TRUE : VK_FALSE;
+        *supported = reinterpret_cast<Driver::PhysicalDevice*>(device)->presentSupport && family == driver.presentFamily
+                         ? VK_TRUE
+                         : VK_FALSE;
         return VK_SUCCESS;
     }
-    VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo*,
+    VKAPI_ATTR VkResult VKAPI_CALL vkCreateDevice(VkPhysicalDevice, const VkDeviceCreateInfo* info,
                                                   const VkAllocationCallbacks*, VkDevice* device)
     {
+        driver.createdQueueFamilies.clear();
+        for (uint32_t i = 0; i < info->queueCreateInfoCount; ++i)
+        {
+            const auto& queue = info->pQueueCreateInfos[i];
+            CHECK(queue.queueCount == 1);
+            CHECK(queue.pQueuePriorities[0] == 1.0f);
+            driver.createdQueueFamilies.push_back(queue.queueFamilyIndex);
+        }
+        REQUIRE(info->enabledExtensionCount == 1);
+        CHECK(std::string(info->ppEnabledExtensionNames[0]) == VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         return driver.Create(device, Failure::Device);
     }
     VKAPI_ATTR void VKAPI_CALL vkDestroyDevice(VkDevice device, const VkAllocationCallbacks*)
@@ -406,10 +424,19 @@ extern "C"
         driver.Destroy(pass);
         driver.renderPassFormats.erase(pass);
     }
-    VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice, const VkDescriptorSetLayoutCreateInfo*,
+    VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorSetLayout(VkDevice, const VkDescriptorSetLayoutCreateInfo* info,
                                                                const VkAllocationCallbacks*,
                                                                VkDescriptorSetLayout* layout)
     {
+        driver.descriptorBindingCounts.insert(info->bindingCount);
+        REQUIRE(info->bindingCount <= 1);
+        if (info->bindingCount)
+        {
+            CHECK(info->pBindings[0].binding == 0);
+            CHECK(info->pBindings[0].descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+            CHECK(info->pBindings[0].descriptorCount == 1);
+            CHECK(info->pBindings[0].stageFlags == VK_SHADER_STAGE_FRAGMENT_BIT);
+        }
         return driver.Create(layout, Failure::DescriptorLayout);
     }
     VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorSetLayout(VkDevice, VkDescriptorSetLayout layout,
@@ -610,7 +637,7 @@ extern "C"
     {
         REQUIRE(count == 1);
         driver.uploadRowLength = regions[0].bufferRowLength;
-        const auto& extent = driver.images.at(image);
+        const auto& extent     = driver.images.at(image);
         CHECK(layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         CHECK(regions[0].imageOffset.x == 0);
         CHECK(regions[0].imageOffset.y == 0);
@@ -1397,8 +1424,8 @@ TEST_CASE("Vulkan reconstructs after a previously failed presentation becomes in
 
 TEST_CASE("Vulkan retries failed first pipeline creation after zero-extent startup", "[vulkan][failure]")
 {
-    driver = {};
-    driver.zeroExtent = true;
+    driver                = {};
+    driver.zeroExtent     = true;
     const Failure failure = GENERATE(Failure::RenderPass, Failure::DescriptorLayout, Failure::PipelineLayout,
                                      Failure::Framebuffer, Failure::Semaphore, Failure::PoolBookkeeping);
     {
@@ -1445,5 +1472,43 @@ TEST_CASE("Vulkan adapter selectors do not silently fall back", "[vulkan][select
         REQUIRE(renderer.Init({.container = 1, .dataPath = OIV_TEXT("."), .adapterName = "test gpu"}) == 0);
         CHECK(renderer.GetSelectedGPUIndex() == 0);
     }
+    CHECK(driver.objects.empty());
+}
+
+TEST_CASE("Vulkan uses bounded queue storage for shared and distinct families", "[vulkan][selection]")
+{
+    driver                = {};
+    const auto families   = GENERATE(std::pair{0u, 0u}, std::pair{0u, 1u}, std::pair{1u, 0u});
+    driver.graphicsFamily = families.first;
+    driver.presentFamily  = families.second;
+    {
+        OIV::VKRenderer renderer;
+        REQUIRE(renderer.Init({.container = 1, .dataPath = OIV_TEXT("."), .gpuIndex = -1}) == 0);
+        const auto expected = families.first == families.second ? std::vector<uint32_t>{0}
+                                                                : std::vector<uint32_t>{0, 1};
+        CHECK(driver.createdQueueFamilies == expected);
+        CHECK(driver.descriptorBindingCounts == std::set<uint32_t>{0, 1});
+    }
+    CHECK(driver.objects.empty());
+}
+
+TEST_CASE("Vulkan reports each adapter's acceleration and enumeration index without selecting it",
+          "[vulkan][selection]")
+{
+    driver         = {};
+    driver.devices = {{.type = VK_PHYSICAL_DEVICE_TYPE_CPU},
+                      {.type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU},
+                      {.type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU},
+                      {.type = VK_PHYSICAL_DEVICE_TYPE_OTHER}};
+    OIV::VKRenderer renderer;
+    const auto adapters = renderer.EnumerateAdapters();
+    REQUIRE(adapters.size() == 4);
+    CHECK(adapters[0].acceleration == OIV::Acceleration::Software);
+    CHECK(adapters[1].acceleration == OIV::Acceleration::Hardware);
+    CHECK(adapters[2].preferred);
+    CHECK(adapters[3].acceleration == OIV::Acceleration::Unknown);
+    for (size_t i = 0; i < adapters.size(); ++i)
+        CHECK(adapters[i].index == static_cast<int>(i));
+    CHECK(renderer.GetSelectedGPUIndex() == -1);
     CHECK(driver.objects.empty());
 }

@@ -16,7 +16,7 @@ For more information visit [www.openimageviewer.com](https://www.openimageviewer
 
 ## Features
 
-* Hardware-accelerated rendering with D3D11 and OpenGL renderer support.
+* Rendering with Vulkan, D3D11, and OpenGL, with hardware-first startup selection.
 * Fast folder browsing, sorting, slideshow playback, zooming, panning, and fullscreen viewing.
 * Keyboard-first operation with the active key bindings available from F1.
 * Image inspection tools including image information, texel grid, pixel inspection, and selection workflows.
@@ -133,17 +133,25 @@ OIV is distributed under the [OpenImageViewer License](LICENSE.md).
 ## Command line
 
 ```text
-OIViewer [--renderer=GL|D3D11|Vulkan] [--adapter="adapter name" | --adapter_index=n] [--] [image or folder]
+OIViewer [--renderer=GL|D3D11|Vulkan] [--adapter_name="vendor or GPU text"] [--adapter_index=n] [--] [image or folder]
 OIViewer --renderer=Vulkan --adapter_index=1 "photos/cat.jpg"
-OIViewer --renderer=D3D11 --adapter="Intel(R) Graphics"
+OIViewer --renderer=D3D11 --adapter_name=Intel
 OIViewer --help
 OIViewer --version
 ```
 
-Renderer names are case-insensitive; OpenGL is also accepted as GL. Only compiled backends are available. Automatic startup prefers D3D11 on Windows and Vulkan on Linux (with GL fallback when available). Explicit graphics selections do not silently fall back.
+Renderer names are case-insensitive. Help lists only compiled backends; the old OpenGL alias is rejected. An explicit renderer restricts startup to that API, including its eligible software devices.
 
-Adapter selection is supported by D3D11 and Vulkan. Names match exactly ignoring case; indices are zero-based and specific to the selected backend. GL uses the platform-selected adapter and rejects explicit adapter options. The old --gpu option is replaced by --adapter_index.
+Adapter selection is supported by D3D11 and Vulkan. Names match vendor IDs or GPU-name substrings ignoring ASCII case. Indices are zero-based and specific to the selected API; an index overrides a supplied name and disables fallback. GL uses the platform-selected adapter and rejects explicit adapter options. Deprecated --adapter and --gpu options are rejected.
 
 Quoted Unicode paths are preserved. Unquoted positional tokens are joined with spaces; use -- before a path beginning with a dash. On Windows, explicit graphics options start a new instance rather than forwarding to an existing tray instance. Help/version/errors use the parent console or redirected streams without opening a console window.
 
 Press **Shift+Tilde** for system information; plain Tilde retains image information. See [integration notes](docs/CLI11Integration.md) for ownership and startup details.
+
+## Renderer selection
+
+Windows builds enable Vulkan and D3D11 by default; GL is optional. Linux builds enable Vulkan and GL. Enabled backends require their development dependencies, and CMake reports missing dependencies instead of disabling a renderer silently.
+
+Automatic startup prefers hardware, then unknown acceleration, then software. API order within each group is Vulkan, D3D11 (Windows), then GL, skipping backends that were not built. `--renderer` fixes the API. `--adapter_name` matches vendor/name text; `--adapter_index` overrides the name, uses the selected or default built API, and disables fallback. GL cannot explicitly select an adapter. Use `--help` for the choices in your build.
+
+[Renderer build, runtime, adapter-selection, and CLI policy](docs/CLI11Integration.md) documents dependencies, examples, diagnostics, and the distinction between the default API and the successfully selected renderer.

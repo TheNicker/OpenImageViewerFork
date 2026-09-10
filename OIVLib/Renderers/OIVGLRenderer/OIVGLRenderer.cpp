@@ -1,4 +1,5 @@
 #include "OIVGLRenderer.h"
+#include "GLAcceleration.h"
 
 #include <ImageUtil/ImageUtil.h>
 
@@ -172,6 +173,9 @@ void main()
 
         // GLEW can leave GL_INVALID_ENUM behind while probing a compatibility context.
         glGetError();
+        const auto* vendor   = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+        const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        fAcceleration        = ClassifyGLAcceleration(vendor ? vendor : "", renderer ? renderer : "");
         PrepareResources();
         return 0;
     }

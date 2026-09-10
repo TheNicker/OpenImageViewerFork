@@ -2,7 +2,6 @@
 
 #include <CLI/CLI.hpp>
 #include <Version.h>
-#include <map>
 #include <sstream>
 #include <vector>
 
@@ -13,23 +12,45 @@ namespace OIV
         void ConfigureCommandLine(CLI::App& app, CommandLineParameters& parameters,
                                   std::vector<LLUtils::native_string_type>& input)
         {
-            const std::map<std::string, RendererType> renderers{{"GL", RendererType::OpenGL},
-                                                                {"OpenGL", RendererType::OpenGL},
-                                                                {"D3D11", RendererType::D3D11},
-                                                                {"Vulkan", RendererType::Vulkan}};
-            app.add_option("--renderer", parameters.rendering.renderer, "Rendering backend: GL, D3D11 or Vulkan")
-                ->transform(CLI::CheckedTransformer(renderers, CLI::ignore_case).description(""))
-                // Transforms run newest first: reject numeric enum values before converting accepted names.
-                ->transform(CLI::IsMember(renderers, CLI::ignore_case))
+            std::string choices;
+            for (const auto& info : GetBuiltRenderers())
+            {
+                if (!choices.empty())
+                    choices += " -> ";
+                choices += info.name;
+            }
+            app.add_option_function<std::string>(
+                   "--renderer",
+                   [&parameters](const std::string& value)
+                   {
+                       for (const auto& info : GetBuiltRenderers())
+                           if (detail::AsciiEqual(value, info.name))
+                               parameters.rendering.renderer = info.type;
+                   },
+                   "Rendering API: " + choices)
+                ->check(
+                    [](const std::string& value)
+                    {
+                        const bool built = std::ranges::any_of(GetBuiltRenderers(), [&](const auto& info)
+                                                               { return detail::AsciiEqual(value, info.name); });
+                        return built ? std::string{} : "Choose a built renderer: " + value + " is unavailable";
+                    })
                 ->type_name("NAME");
-            auto* adapter = app.add_option("--adapter", parameters.rendering.adapter,
-                                           "Exact adapter name (case-insensitive; D3D11/Vulkan)");
-            auto* index   = app.add_option("--adapter_index", parameters.rendering.adapterIndex,
-                                           "Zero-based adapter index (D3D11/Vulkan)")
-                                ->check(CLI::NonNegativeNumber);
-            adapter->excludes(index);
-            adapter->check([](const std::string& value)
-                           { return value.empty() ? "Adapter name cannot be empty" : ""; });
+            app.add_option("--adapter_name", parameters.rendering.adapterName,
+                           "Vendor or GPU-name substring; ignored when an index is supplied")
+                ->check([](const std::string& value) { return value.empty() ? "Adapter name cannot be empty" : ""; });
+            app.add_option("--adapter_index", parameters.rendering.adapterIndex,
+                           "Nonnegative API-specific index; overrides the name and disables fallback")
+                ->check(CLI::NonNegativeNumber);
+            app.footer("Selection policy:\n"
+                       "  Prefer hardware, then unknown acceleration, then software.\n"
+                       "  API preference within each group: " +
+                       (choices.empty() ? "none" : choices) +
+                       ".\n"
+                       "  --renderer fixes the API; no API fallback.\n"
+                       "  --adapter_name matches vendor/name text; first usable match.\n"
+                       "  --adapter_index overrides the name and disables fallback,\n"
+                       "  using the selected API or the build's default API.");
             app.add_option("input", input, "Image or folder; unquoted path tokens are joined with spaces");
             app.set_version_flag("--version", FormatFullVersion(CurrentVersion));
         }
@@ -64,6 +85,6 @@ namespace OIV
     {
         // Explicit graphics options must reach a new instance rather than an existing process's renderer.
         return parameters.inputPath.has_value() && !parameters.inputPath->empty() && !parameters.rendering.renderer &&
-               !parameters.rendering.adapter && !parameters.rendering.adapterIndex;
+               !parameters.rendering.adapterName && !parameters.rendering.adapterIndex;
     }
 }  // namespace OIV

@@ -51,7 +51,6 @@ namespace OIV
 #pragma endregion
 
 #pragma region //-------------Private methods------------------
-        IRendererSharedPtr CreateRenderer(RendererType renderer);
         bool IsImageDisplayed() const;
         void UpdateGpuParams();
         IMUtil::AxisAlignedRotation ResolveExifRotation(unsigned short exifRotation) const;

@@ -18,16 +18,13 @@ namespace OIV
                                                                   const OIVBaseImageSharedPtr& rasterized,
                                                                   IMCodec::ImageCodec& imageCodec);
         static LLUtils::native_string_type CreateKeyBindingsMessage();
-        static LLUtils::native_string_type CreateSystemInfoMessage(const LLUtils::native_string_type& appName,
-                                                                    const LLUtils::native_string_type& appVersion,
-                                                                    const LLUtils::native_string_type& gitHash,
-                                                                    const LLUtils::native_string_type& buildType,
-                                                                    const LLUtils::native_string_type& backendName,
-                                                                    const LLUtils::native_string_type& gpuName,
-                                                                    const LLUtils::native_string_type& apiVersion,
-                                                                    const LLUtils::native_string_type& driverVersion,
-                                                                    const LLUtils::native_string_type& osName,
-                                                                    const LLUtils::native_string_type& cpuCores);
+        static LLUtils::native_string_type CreateSystemInfoMessage(
+            const LLUtils::native_string_type& appName, const LLUtils::native_string_type& appVersion,
+            const LLUtils::native_string_type& gitHash, const LLUtils::native_string_type& buildType,
+            const LLUtils::native_string_type& backendName, const LLUtils::native_string_type& gpuName,
+            int adapterIndex, const LLUtils::native_string_type& acceleration,
+            const LLUtils::native_string_type& apiVersion, const LLUtils::native_string_type& driverVersion,
+            const LLUtils::native_string_type& osName, const LLUtils::native_string_type& cpuCores);
         static LLUtils::native_string_type GetFileTime(const LLUtils::native_string_type& filePath);
     };
 }  // namespace OIV

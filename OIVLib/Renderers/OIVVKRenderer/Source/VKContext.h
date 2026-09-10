@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <Interfaces/RendererOptions.h>
 #include <vector>
 
 #ifdef _WIN32
@@ -39,6 +40,8 @@ namespace OIV
         VKContext& operator=(const VKContext&) = delete;
         ~VKContext();
 
+        static std::vector<RendererAdapter> EnumerateAdapters();
+        Acceleration GetAcceleration() const;
         void Init(const CreateParams& params);
         void Purge();
         bool RecreateSwapChain(int width, int height, bool recoverSurface);

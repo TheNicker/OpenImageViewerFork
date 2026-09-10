@@ -53,9 +53,28 @@ if(OIV_BUILD_RENDERER_GL)
 endif()
 
 if(OIV_BUILD_RENDERER_VK)
-    find_package(Vulkan REQUIRED)
     target_compile_definitions(${TargetName} PRIVATE OIV_TEST_VK_RENDERER)
     target_link_libraries(${TargetName} PRIVATE OIVVKRenderer)
+
+    if(WIN32)
+        # Provide the same loader object with an absent module name. The static renderer
+        # library then uses these symbols; installed system DLLs are never touched.
+        add_executable(tests_vk_runtime_failure
+            Vulkan/RuntimeFailureTests.cpp
+            ../Clients/OIViewer/Source/CommandLine.cpp
+            ../OIVLib/Renderers/OIVVKRenderer/Source/VKRuntimeWindows.cpp
+        )
+        target_compile_definitions(tests_vk_runtime_failure PRIVATE OIV_VK_TEST_MISSING_RUNTIME
+            $<TARGET_PROPERTY:OIVVKRenderer,COMPILE_DEFINITIONS>)
+        target_include_directories(tests_vk_runtime_failure PRIVATE
+            ../Clients/OIViewer/Source ../OIVLib/OIV/Source ../OIVLib/Renderers/OIVVKRenderer/Source)
+        target_link_libraries(tests_vk_runtime_failure PRIVATE oiv CLI11::CLI11 Catch2::Catch2WithMain Vulkan::Headers user32)
+        if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+            target_link_options(tests_vk_runtime_failure PRIVATE "/SUBSYSTEM:CONSOLE" "/ENTRY:wmainCRTStartup")
+        elseif(MINGW)
+            target_link_options(tests_vk_runtime_failure PRIVATE "-mconsole" "-municode")
+        endif()
+    endif()
 
     # Keep Vulkan failure doubles isolated from the normal renderer tests and the real Vulkan loader.
     add_executable(tests_vk_failures
@@ -66,7 +85,7 @@ if(OIV_BUILD_RENDERER_VK)
         ../OIVLib/Renderers/OIVVKRenderer/Source/VKTexture.cpp
     )
     add_dependencies(tests_vk_failures VKShaders)
-    target_compile_definitions(tests_vk_failures PRIVATE $<TARGET_PROPERTY:OIVVKRenderer,COMPILE_DEFINITIONS>)
+    target_compile_definitions(tests_vk_failures PRIVATE OIV_VK_TEST_DOUBLES $<TARGET_PROPERTY:OIVVKRenderer,COMPILE_DEFINITIONS>)
     if(WIN32)
         target_link_libraries(tests_vk_failures PRIVATE user32)
     endif()

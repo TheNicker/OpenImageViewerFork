@@ -7,7 +7,7 @@ jobs:
   build-linux-mingw64:
     runs-on: ubuntu-latest
     env:
-      BUILD_DIR: ${{ github.workspace }}/build
+      BUILD_DIR: ${{ github.workspace }}/build/windows-clang
 
     container:
       image: ghcr.io/openimageviewer/openimageviewer/oiv-builder-arch:latest
@@ -25,6 +25,12 @@ jobs:
     - name: Trust checkout directory
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+    - name: Install host Vulkan shader tools and stage target headers
+      run: |
+        pacman -Syu --noconfirm --needed shaderc vulkan-headers
+        mkdir -p "$BUILD_DIR/vulkan-headers/include"
+        cp -R /usr/include/vulkan /usr/include/vk_video "$BUILD_DIR/vulkan-headers/include/"
+
     - name: Configure CMake
       run: >
         cmake
@@ -35,6 +41,8 @@ jobs:
         -DIMCODEC_BUILD_CODEC_WEBP=OFF
         -DFREETYPE_WRAPPER_BUILD_FRIBIDI=OFF
         -DMINGW_POST_BUILD_DONT_COPY_BINARIES=ON
+        -DOIV_VULKAN_INCLUDE_DIR="$BUILD_DIR/vulkan-headers/include"
+        -DOIV_GLSLC=/usr/bin/glslc
 
     - name: Build
       run: cmake --build "$BUILD_DIR" -- -j$(nproc)
@@ -42,7 +50,7 @@ jobs:
   build-windows:
     runs-on: windows-2025-vs2026
     env:
-      BUILD_DIR: ${{ github.workspace }}/build
+      BUILD_DIR: ${{ github.workspace }}/build/windows-clang
 
     steps:
     - uses: actions/checkout@v4
@@ -50,10 +58,36 @@ jobs:
         fetch-depth: 1
         submodules: recursive
 
+    - name: Install Vulkan build dependencies
+      shell: pwsh
+      run: |
+        choco install vulkan-sdk --yes --no-progress
+        if ($LASTEXITCODE -ne 0) { throw "Vulkan SDK installation failed" }
+        $sdk = Get-ChildItem C:/VulkanSDK -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
+
+    - name: Activate the Visual Studio development environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Configure CMake
       run: >
-        cmake -B "$env:BUILD_DIR"
+        cmake -G Ninja -B "$env:BUILD_DIR"
         -S "$env:GITHUB_WORKSPACE"
+        -DCMAKE_C_COMPILER=clang-cl
+        -DCMAKE_CXX_COMPILER=clang-cl
+        -DCMAKE_BUILD_TYPE=Debug
 
     - name: Build
-      run: cmake --build "$env:BUILD_DIR" --config Release
+      run: cmake --build "$env:BUILD_DIR"
+
+    - name: Run renderer and CLI tests
+      shell: pwsh
+      run: |
+        & "$env:BUILD_DIR/bin/tests.exe"
+        if ($LASTEXITCODE -ne 0) { throw "Unit tests failed" }
+        & "$env:BUILD_DIR/bin/tests_vk_failures.exe"
+        if ($LASTEXITCODE -ne 0) { throw "Vulkan failure tests failed" }
+        & "$env:BUILD_DIR/bin/tests_vk_runtime_failure.exe"
+        if ($LASTEXITCODE -ne 0) { throw "Vulkan loader tests failed" }
