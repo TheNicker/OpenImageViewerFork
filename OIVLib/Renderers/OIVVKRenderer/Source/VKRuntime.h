@@ -8,6 +8,8 @@ namespace OIV
     #define OIV_VK_FUNCTION(name) extern PFN_##name name;
     #include "VKFunctions.inc"
     #undef OIV_VK_FUNCTION
+    // Call for Vulkan discovery/initialization only; help and metadata must work without a runtime.
+    // Load failures are cached for process lifetime; fallback belongs to startup selection.
     void EnsureVulkanRuntime();
 }  // namespace OIV
 #endif

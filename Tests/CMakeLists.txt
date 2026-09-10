@@ -84,6 +84,7 @@ if(OIV_BUILD_RENDERER_VK)
     endif()
 
     # Keep Vulkan failure doubles isolated from the normal renderer tests and the real Vulkan loader.
+    # They exercise failure control flow and resource lifetime; real driver presentation needs viewer smoke tests.
     add_executable(tests_vk_failures
         Vulkan/FailureTests.cpp
         ../OIVLib/Renderers/OIVVKRenderer/Source/VKContext.cpp

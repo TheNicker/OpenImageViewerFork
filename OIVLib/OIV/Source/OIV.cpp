@@ -472,13 +472,7 @@ namespace OIV
         else
 #endif
         {
-            // Apply explicit constraints first, then exhaust Hardware, Unknown, and Software
-            // in compiled API order. Selection owns provisional instances; only a successful
-            // renderer receives application images. API switching ends here at startup.
-            // An explicit API forbids cross-API fallback. An index overrides a name, fixes
-            // the device, and binds to the build's default API when none is supplied. Names
-            // survive fallback and select the first usable match in each tier; GL is excluded
-            // when adapter selection is required.
+            // Only a successfully initialized renderer receives the images queued during startup.
             fRenderer = SelectRenderer(GetRendererBackends(), options, params);
         }
         // Expected candidate failures are collected by startup, without application dialogs.

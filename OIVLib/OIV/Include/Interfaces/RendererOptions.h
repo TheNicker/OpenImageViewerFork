@@ -46,6 +46,7 @@ namespace OIV
         bool supportsAdapterSelection;
     };
 
+    // Names are UTF-8; indexes belong to this API's enumeration.
     struct RendererAdapter
     {
         int index = -1;
@@ -57,13 +58,17 @@ namespace OIV
 
     struct RendererOptions
     {
+        // Restrict the API; its eligible adapters and acceleration tiers still participate.
         std::optional<RendererType> renderer;
+        // Vendor/name filter retained across API fallback; ignored when adapterIndex is set.
         std::optional<std::string> adapterName;
+        // Zero-based index in renderer or GetDefaultRenderer(); disables adapter and API fallback.
         std::optional<int> adapterIndex;
     };
 
     // Constant metadata from this library's build; no graphics runtime is loaded or queried.
     std::span<const RendererInfo> GetBuiltRenderers();
+    // First compiled API; automatic startup may select another after probing the machine.
     RendererType GetDefaultRenderer();
     bool IsRendererAvailable(RendererType renderer);
     std::string ValidateRendererOptions(const RendererOptions& options);
@@ -93,6 +98,7 @@ namespace OIV
                                         [](unsigned char x, unsigned char y) { return AsciiLower(x) == AsciiLower(y); })
                         .empty();
         }
+        // Recognized vendor names match IDs (AMD also matches Radeon); other queries match name substrings.
         constexpr bool AdapterNameMatches(std::string_view requested, std::string_view available, uint32_t vendorId = 0)
         {
             constexpr std::array<std::pair<std::string_view, uint32_t>, 3> vendors{
