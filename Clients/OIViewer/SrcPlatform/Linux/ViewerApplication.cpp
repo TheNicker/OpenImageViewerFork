@@ -68,15 +68,9 @@ namespace OIV
 
     void ViewerApplication::InitializeRenderer()
     {
-        void* nativeDisplay = nullptr;
-#ifdef LWS_HAS_WAYLAND_BACKEND
-        nativeDisplay = *LWS::Wayland::GetDisplay(fWindow.GetCanvasWindow());
-#endif
-        const auto clientArea = fWindow.GetCanvasWindow().GetClientAreaSize();
-        if (!clientArea.has_value())
-            LL_EXCEPTION(LLUtils::Exception::ErrorCode::InvalidState, "Unable to obtain the canvas size");
-        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(fWindow.GetCanvasWindow())),
-                                   *clientArea, nativeDisplay);
+        auto& canvas = fWindow.GetCanvasWindow();
+        fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(canvas)),
+                                   *LWS::Wayland::GetDisplay(canvas));
     }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(
