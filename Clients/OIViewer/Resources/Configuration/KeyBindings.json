@@ -1,7 +1,7 @@
 {
   "KeyBindings": [
     { "F1": "ToggleKeyBindings" },
-    { "F3": "ShowSystemInfo" },
+    { "Shift+Grave": "ShowSystemInfo" },
     { "F2": "ShowSettings" },
     { "1": "WindowSizeX1/4" },
     { "2": "WindowSizeX1/2" },

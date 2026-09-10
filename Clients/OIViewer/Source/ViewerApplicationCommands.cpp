@@ -375,23 +375,20 @@ namespace OIV
         auto message = MessageHelper::CreateSystemInfoMessage(
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string("OpenImageViewer")),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
-                std::string("Version ") + OIV::FormatFullVersion(OIV::CurrentVersion)),
+                OIV::FormatFullVersion(OIV::CurrentVersion)),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(OIV_GIT_SHORT_HASH)),
-            buildType,
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(backendName)),
+            buildType, LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(backendName)),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(gpuName)),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(apiVersion)),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(driverVersion)),
-            osName,
-            cpuCores
-        );
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(driverVersion)), osName,
+            cpuCores);
 
         int gpuIndex = renderer ? renderer->GetSelectedGPUIndex() : -1;
         if (gpuIndex >= 0)
-            message += LLUTILS_TEXT("\nGPU Index: ") +
+            message += LLUTILS_TEXT("\nAdapter index: ") +
                        LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::to_string(gpuIndex));
         else
-            message += LLUTILS_TEXT("\nGPU Index: Auto");
+            message += LLUTILS_TEXT("\nAdapter index: Not reported");
 
         text->SetText(message);
         text->SetBackgroundColor({0, 0, 0, 216});

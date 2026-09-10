@@ -111,27 +111,23 @@ namespace OIV
         args.spaceBetweenColumns                        = 3;
         MessageFormatter::MessagesValues& messageValues = args.messageValues;
 
-        messageValues.emplace_back("Application", MessageFormatter::ValueObjectList{
-            MessageFormatter::ValueObject(appName),
-            MessageFormatter::ValueObject(appVersion),
-            MessageFormatter::ValueObject(gitHash),
-            MessageFormatter::ValueObject(buildType)
-        });
-
-        messageValues.emplace_back("Operating System", MessageFormatter::ValueObjectList{
-            MessageFormatter::ValueObject(osName)
-        });
-
-        messageValues.emplace_back("CPU", MessageFormatter::ValueObjectList{
-            MessageFormatter::ValueObject(cpuCores)
-        });
-
-        messageValues.emplace_back("Renderer", MessageFormatter::ValueObjectList{
-            MessageFormatter::ValueObject(backendName),
-            MessageFormatter::ValueObject(gpuName),
-            MessageFormatter::ValueObject(apiVersion),
-            MessageFormatter::ValueObject(driverVersion)
-        });
+        // One value per labeled row: the formatter's columns concatenate within a row.
+        for (const auto& [label, value] :
+             std::initializer_list<std::pair<const char*, const LLUtils::native_string_type*>>{
+                 {"Application", &appName},
+                 {"Version", &appVersion},
+                 {"Build", &buildType},
+                 {"Commit", &gitHash},
+                 {"Operating system", &osName},
+                 {"CPU cores", &cpuCores},
+                 {"Renderer", &backendName},
+                 {"Adapter", &gpuName},
+                 {"API version", &apiVersion},
+                 {"Driver version", &driverVersion}})
+        {
+            messageValues.emplace_back(label, MessageFormatter::ValueObjectList{MessageFormatter::ValueObject(
+                                                  value->empty() ? LLUTILS_TEXT("Not reported") : *value)});
+        }
 
         message += LLUTILS_TEXT('\n');
         message += MessageFormatter::FormatMetaText(args);
