@@ -4,6 +4,7 @@
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/PlatformUtility.h>
+#include <OIVAppCore/ViewCommandPolicy.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -71,6 +72,20 @@ namespace OIV
         auto& canvas = fWindow.GetCanvasWindow();
         fRenderGateway->Initialize(reinterpret_cast<LWS::Handle>(*LWS::Wayland::GetSurface(canvas)),
                                    *LWS::Wayland::GetDisplay(canvas));
+    }
+
+    WindowSizeDecision ViewerApplication::GetWindowSizeDecision(const CommandManager::CommandArgs& args) const
+    {
+        const auto& workRect               = fCurrentMonitorProperties.workRect;
+        const auto workAreaTopLeft         = workRect.GetCorner(LLUtils::TopLeft);
+        const auto workAreaBottomRight     = workRect.GetCorner(LLUtils::BottomRight);
+        const WindowWorkingArea workArea   = {.left   = workAreaTopLeft.x,
+                                              .top    = workAreaTopLeft.y,
+                                              .right  = workAreaBottomRight.x,
+                                              .bottom = workAreaBottomRight.y};
+        const LWS::LogicalSize currentSize = fWindow.GetWindow().GetClientSize();
+        return ViewCommandPolicy::DecideWindowSize(args, {currentSize.x, currentSize.y},
+                                                   fWindow.GetWindow().GetPosition().value_or(LWS::Point{}), workArea);
     }
 
     LWS::Rect ViewerApplication::GetNotificationIconRect(
