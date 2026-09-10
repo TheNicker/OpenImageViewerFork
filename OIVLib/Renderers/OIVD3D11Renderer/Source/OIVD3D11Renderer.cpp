@@ -1,7 +1,7 @@
 #include "OIVD3D11Renderer.h"
 #include "D3D11/D3D11Renderer.h"
 
-#include <OIVShared/Utf8.h>
+#include <LLUtils/StringUtility.h>
 
 namespace OIV
 {
@@ -65,7 +65,7 @@ namespace OIV
         if (fGPUName.empty())
         {
             const DXGI_ADAPTER_DESC desc = fD3D11Renderer->GetAdapterDesc();
-            fGPUName                     = EncodeUtf8(desc.Description);
+            fGPUName                     = LLUtils::StringUtility::ConvertString<std::string>(desc.Description);
             if (fGPUName.empty())
                 fGPUName = "Unknown";
         }

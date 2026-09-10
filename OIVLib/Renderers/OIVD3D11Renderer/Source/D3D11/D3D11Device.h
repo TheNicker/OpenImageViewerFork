@@ -5,7 +5,7 @@
 #include "D3D11Common.h"
 #include "D3D11Error.h"
 #include <Interfaces/RendererOptions.h>
-#include <OIVShared/Utf8.h>
+#include <LLUtils/StringUtility.h>
 #include <array>
 #include <stdexcept>
 #include <vector>
@@ -54,7 +54,8 @@ namespace OIV
                 D3D11Error::HandleDeviceError(adapter->GetDesc1(&desc), "Could not read D3D11 adapter properties");
                 const bool software = (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
                 softwareFound |= software;
-                adapters.push_back({static_cast<int>(index), EncodeUtf8(desc.Description), desc.VendorId,
+                adapters.push_back({static_cast<int>(index),
+                                    LLUtils::StringUtility::ConvertString<std::string>(desc.Description), desc.VendorId,
                                     software ? Acceleration::Software : Acceleration::Hardware, index == 0});
             }
             // Older DXGI versions may omit WARP from indexed enumeration. It remains an explicit

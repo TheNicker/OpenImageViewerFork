@@ -1,5 +1,5 @@
 #include <iomanip>
-#include <OIVShared/Utf8.h>
+#include <LLUtils/StringUtility.h>
 #include <string>
 #include <filesystem>
 #include <thread>
@@ -16,7 +16,6 @@
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
 #include <LLUtils/PlatformUtility.h>
-#include <LLUtils/StringUtility.h>
 #include <LLUtils/UniqueIDProvider.h>
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
@@ -379,10 +378,13 @@ namespace OIV
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
                 OIV::FormatFullVersion(OIV::CurrentVersion)),
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(OIV_GIT_SHORT_HASH)),
-            buildType, DecodeUtf8(backendName), DecodeUtf8(gpuName), renderer ? renderer->GetSelectedGPUIndex() : -1,
+            buildType, LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(backendName),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(gpuName),
+            renderer ? renderer->GetSelectedGPUIndex() : -1,
             LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
                 std::string(GetAccelerationName(renderer ? renderer->GetAcceleration() : Acceleration::Unknown))),
-            DecodeUtf8(apiVersion), DecodeUtf8(driverVersion), osName, cpuCores);
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(apiVersion),
+            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(driverVersion), osName, cpuCores);
 
         text->SetText(message);
         text->SetBackgroundColor({0, 0, 0, 216});

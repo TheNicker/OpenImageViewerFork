@@ -51,6 +51,11 @@ Scale-matched buffers keep 100% image zoom pixel-accurate; the compositor contro
 the requested logical size. OIViewer sets its Wayland app ID, while compositor window icons come from the matching
 installed desktop-file metadata rather than an icon attached to the window.
 
+### Text encoding
+
+Text uses UTF-8 on Linux and UTF-16 at wide Windows interfaces. String conversion is locale-independent;
+see the [encoding policy and design rationale](docs/StringEncoding.md).
+
 ### Windows Runtime Notes
 
 Windows 7 SP1, 8, 8.1, 10, and 11 are supported targets.
