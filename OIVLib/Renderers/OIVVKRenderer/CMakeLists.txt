@@ -52,7 +52,7 @@ add_dependencies(${TargetName} VKShaders)
 
 target_include_directories(${TargetName}
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/Include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../OIV/Include
 )
 
@@ -60,8 +60,8 @@ target_link_libraries(${TargetName}
     PUBLIC
         ImageCodec
         LLUtils::LLUtils
-        Vulkan::Vulkan
     PRIVATE
+        Vulkan::Vulkan
         ImageUtil
 )
 

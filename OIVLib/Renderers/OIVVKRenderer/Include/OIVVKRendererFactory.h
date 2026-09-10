@@ -5,7 +5,8 @@ namespace OIV
 {
     class VKRendererFactory
     {
-    public:
+      public:
+
         static IRendererSharedPtr Create();
     };
-}
+}  // namespace OIV
