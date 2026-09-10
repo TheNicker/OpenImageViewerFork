@@ -9,16 +9,88 @@ namespace OIV
 {
     namespace
     {
-        void ConfigureCommandLine(CLI::App& app, CommandLineParameters& parameters,
-                                  std::vector<LLUtils::native_string_type>& input)
+        constexpr auto RendererHelpGroup = "Choose the drawing software";
+        constexpr auto AdapterHelpGroup  = "Choose the graphics card";
+
+        std::string FormatCommandLineHelp(const CLI::App* app, std::string, CLI::AppFormatMode)
         {
+            CLI::Formatter formatter;
+            formatter.long_option_alignment_ratio(0.2f);
+            const auto renderers = GetBuiltRenderers();
             std::string choices;
-            for (const auto& info : GetBuiltRenderers())
+            for (const auto& info : renderers)
             {
                 if (!choices.empty())
                     choices += " -> ";
                 choices += info.name;
             }
+            const std::string_view defaultRenderer = renderers.empty() ? "none" : renderers.front().name;
+            std::string help = app->get_description() + "\n\n" + app->get_usage() +
+                               "\n\nOpen an image or folder:\n"
+                               "  PATH                        Image or folder to open.\n"
+                               "                              Leave out to start without an image.\n"
+                               "                              Put paths containing spaces in quotes.\n";
+            // Input tokens form one path, so the help above shows PATH rather than a list of paths.
+            for (const auto& group : app->get_groups())
+            {
+                const auto options = app->get_options(
+                    [&group](const CLI::Option* option)
+                    { return option->get_group() == group && !option->get_positional(); });
+                if (!options.empty())
+                {
+                    help += formatter.make_group(group, false, options);
+                    if (group == RendererHelpGroup)
+                    {
+                        help += "\n  A renderer is the software used to draw images.\n"
+                                "  Available renderers, in preferred order: " +
+                                (choices.empty() ? "none" : choices) +
+                                ".\n"
+                                "  Leave this option out to let the app choose and try another if needed.\n";
+                    }
+                    else if (group == AdapterHelpGroup)
+                    {
+                        help += "\n  Leave both options out to let the app choose the graphics card.\n\n"
+                                "  With --adapter_name, the app tries only matching cards. It can try\n"
+                                "  another renderer too, unless you also set --renderer.\n\n"
+                                "  With --adapter_index, the app uses exactly one card and one renderer.\n"
+                                "  Use it with --renderer, since card numbers can differ between renderers.\n"
+                                "  Without --renderer, it uses ";
+                        help += defaultRenderer;
+                        help += ".\n"
+                                "  This option takes priority over --adapter_name.\n"
+                                "  If that choice does not work, the app reports an error and exits.\n";
+                        if (IsRendererAvailable(RendererType::OpenGL))
+                            help += "\n  With GL, your system chooses the graphics card. These two options\n"
+                                    "  cannot be used with GL.\n";
+                    }
+                }
+            }
+            help += "\nExamples:\n"
+                    "  OIViewer \"photos/cat.jpg\"\n"
+                    "  OIViewer \"photos\"\n";
+            if (!renderers.empty())
+                help += "  OIViewer --renderer " + std::string(defaultRenderer) + " \"photos/cat.jpg\"\n";
+            const auto adapterRenderer = std::ranges::find(renderers, true, &RendererInfo::supportsAdapterSelection);
+            if (adapterRenderer != renderers.end())
+            {
+                help += "  OIViewer --adapter_name NVIDIA \"photos/cat.jpg\"\n";
+                help += "  OIViewer --renderer " + std::string(adapterRenderer->name) +
+                        " --adapter_index 0 \"photos/cat.jpg\"\n";
+            }
+            return help;
+        }
+
+        void ConfigureCommandLine(CLI::App& app, CommandLineParameters& parameters,
+                                  std::vector<LLUtils::native_string_type>& input)
+        {
+            app.option_defaults()->group("Help");
+            app.set_help_flag("-h,--help", "Show this help and exit.");
+            const std::string version = FormatFullVersion(CurrentVersion);
+            app.set_version_flag("--version", version, "Show the application version and exit.");
+            app.description("OpenImageViewer Version " + version);
+            app.usage("Usage: OIViewer [OPTIONS] [PATH]");
+            app.formatter_fn(FormatCommandLineHelp);
+            app.add_option("input", input);
             app.add_option_function<std::string>(
                    "--renderer",
                    [&parameters](const std::string& value)
@@ -27,38 +99,36 @@ namespace OIV
                            if (detail::AsciiEqual(value, info.name))
                                parameters.rendering.renderer = info.type;
                    },
-                   "Rendering API: " + choices)
+                   "Use only this renderer.")
                 ->check(
                     [](const std::string& value)
                     {
                         const bool built = std::ranges::any_of(GetBuiltRenderers(), [&](const auto& info)
                                                                { return detail::AsciiEqual(value, info.name); });
-                        return built ? std::string{} : "Choose a built renderer: " + value + " is unavailable";
+                        return built ? std::string{}
+                                     : "Renderer " + value + " is not available; see --help for the available choices";
                     })
-                ->type_name("NAME");
+                ->type_name("NAME")
+                ->group(RendererHelpGroup);
             app.add_option("--adapter_name", parameters.rendering.adapterName,
-                           "Vendor or GPU-name substring; ignored when an index is supplied")
-                ->check([](const std::string& value) { return value.empty() ? "Adapter name cannot be empty" : ""; });
+                           "Choose by brand or part of the card's name.\n"
+                           "Examples: NVIDIA, AMD, Intel.\n"
+                           "Capital letters do not matter.")
+                ->check([](const std::string& value)
+                        { return value.empty() ? "Provide a graphics card brand or part of its name" : ""; })
+                ->type_name("NAME")
+                ->group(AdapterHelpGroup);
             app.add_option("--adapter_index", parameters.rendering.adapterIndex,
-                           "Nonnegative API-specific index; overrides the name and disables fallback")
-                ->check(CLI::NonNegativeNumber);
-            app.footer("Selection policy:\n"
-                       "  Prefer hardware, then unknown acceleration, then software.\n"
-                       "  API preference within each group: " +
-                       (choices.empty() ? "none" : choices) +
-                       ".\n"
-                       "  --renderer fixes the API; no API fallback.\n"
-                       "  --adapter_name matches vendor/name text; first usable match.\n"
-                       "  --adapter_index overrides the name and disables fallback,\n"
-                       "  using the selected API or the build's default API.");
-            app.add_option("input", input, "Image or folder; unquoted path tokens are joined with spaces");
-            app.set_version_flag("--version", FormatFullVersion(CurrentVersion));
+                           "Choose one card by number, starting at 0.")
+                ->check(CLI::NonNegativeNumber.description(""))
+                ->type_name("NUMBER")
+                ->group(AdapterHelpGroup);
         }
     }  // namespace
 
     CommandLineParseResult ParseCommandLine(int argc, const LLUtils::native_char_type* const* argv)
     {
-        CLI::App app{"OpenImageViewer"};
+        CLI::App app;
         CommandLineParameters parameters;
         std::vector<LLUtils::native_string_type> input;
         ConfigureCommandLine(app, parameters, input);

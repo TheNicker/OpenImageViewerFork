@@ -100,10 +100,9 @@ TEST_CASE("CLI help and version are terminal successful results", "[cli]")
         const auto result = std::get<OIV::CommandLineExit>(Parse({option}));
         CHECK(result.exitCode == 0);
         CHECK_FALSE(result.standardOutput.empty());
+        CHECK(result.standardOutput.contains(OIV::FormatFullVersion(OIV::CurrentVersion)));
         CHECK(result.standardError.empty());
     }
-    CHECK(std::get<OIV::CommandLineExit>(Parse({LLUTILS_TEXT("--version")}))
-              .standardOutput.find(OIV::FormatFullVersion(OIV::CurrentVersion)) != std::string::npos);
 }
 
 TEST_CASE("Renderer validation reflects builds and never ignores explicit adapters", "[cli][renderer]")
@@ -125,6 +124,9 @@ TEST_CASE("Renderer validation reflects builds and never ignores explicit adapte
 TEST_CASE("CLI help advertises only compiled APIs in compiled order", "[cli][renderer]")
 {
     const auto help = std::get<OIV::CommandLineExit>(Parse({LLUTILS_TEXT("--help")})).standardOutput;
+    CHECK(help.starts_with("OpenImageViewer Version " + OIV::FormatFullVersion(OIV::CurrentVersion) + "\n"));
+    CHECK(help.contains("Choose the drawing software:"));
+    CHECK(help.contains("Choose the graphics card:"));
     std::string order;
     for (const auto& info : OIV::GetBuiltRenderers())
     {
@@ -132,12 +134,11 @@ TEST_CASE("CLI help advertises only compiled APIs in compiled order", "[cli][ren
             order += " -> ";
         order += info.name;
     }
-    CHECK(help.find("API preference within each group: " + (order.empty() ? "none" : order) + ".") !=
-          std::string::npos);
+    CHECK(help.contains("Available renderers, in preferred order: " + (order.empty() ? "none" : order) + "."));
     for (const auto& [name, type] :
          std::array{std::pair{"GL", OIV::RendererType::OpenGL}, std::pair{"D3D11", OIV::RendererType::D3D11},
                     std::pair{"Vulkan", OIV::RendererType::Vulkan}})
-        CHECK((help.find(name) != std::string::npos) == OIV::IsRendererAvailable(type));
-    CHECK(help.find("OpenGL") == std::string::npos);
-    CHECK(help.find("--adapter ") == std::string::npos);
+        CHECK(help.contains(name) == OIV::IsRendererAvailable(type));
+    CHECK_FALSE(help.contains("OpenGL"));
+    CHECK_FALSE(help.contains("--adapter "));
 }
