@@ -415,6 +415,40 @@ TEST_CASE("ViewCommandPolicy parses navigation and window size decisions", "[App
                 .mode == OIV::WindowSizeMode::Fullscreen);
 }
 
+TEST_CASE("Relative window sizing preserves logical geometry on a monitor left of the primary", "[AppCore]")
+{
+    // A 2560x1380 work area at 125% scaling occupies 2048x1104 logical units.
+    const auto decision = OIV::ViewCommandPolicy::DecideWindowSize(OIV::CommandManager::CommandArgs::FromString(
+                                                                       "size_type=relative;width=50;height=50"),
+                                                                   {800, 600}, {-1800, 100}, {-2048, 0, 0, 1104});
+    REQUIRE(decision.mode == OIV::WindowSizeMode::Windowed);
+    REQUIRE(decision.size == LLUtils::PointI32{1024, 552});
+    REQUIRE(decision.position == LLUtils::PointI32{-1912, 124});
+}
+
+TEST_CASE("Entire-screen window sizing delegates monitor geometry to the window system", "[AppCore]")
+{
+    const auto args = OIV::CommandManager::CommandArgs::FromString("size_type=relative;width=100;height=100");
+    for (const OIV::WindowWorkingArea area : {OIV::WindowWorkingArea{0, 0, 1920, 1040},
+                                              OIV::WindowWorkingArea{-2560, -360, 0, 1040}, OIV::WindowWorkingArea{}})
+    {
+        const auto decision = OIV::ViewCommandPolicy::DecideWindowSize(args, {800, 600}, {100, 100}, area);
+        REQUIRE(decision.mode == OIV::WindowSizeMode::Maximized);
+    }
+
+    const auto widthOnly = OIV::ViewCommandPolicy::DecideWindowSize(OIV::CommandManager::CommandArgs::FromString(
+                                                                        "size_type=relative;width=100;height=50"),
+                                                                    {800, 600}, {100, 100}, {0, 0, 1920, 1040});
+    REQUIRE(widthOnly.mode == OIV::WindowSizeMode::Windowed);
+    REQUIRE(widthOnly.size == LLUtils::PointI32{1920, 520});
+
+    const auto absolute = OIV::ViewCommandPolicy::DecideWindowSize(OIV::CommandManager::CommandArgs::FromString(
+                                                                       "size_type=absolute;width=100;height=100"),
+                                                                   {800, 600}, {100, 100}, {0, 0, 1920, 1040});
+    REQUIRE(absolute.mode == OIV::WindowSizeMode::Windowed);
+    REQUIRE(absolute.size == LLUtils::PointI32{100, 100});
+}
+
 TEST_CASE("ImageTransformCommandPolicy parses and formats axis-aligned transforms", "[AppCore]")
 {
     auto command = OIV::ImageTransformCommandPolicy::ParseAxisAlignedTransform(

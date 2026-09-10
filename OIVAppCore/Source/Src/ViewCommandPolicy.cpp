@@ -119,6 +119,10 @@ namespace OIV
         const double width  = std::stod(args.GetArgValue("width"));
         const double height = std::stod(args.GetArgValue("height"));
 
+        // Let the window system account for the containing monitor, DPI, and window decorations.
+        if (sizeType == "relative" && width == 100.0 && height == 100.0)
+            return {WindowSizeMode::Maximized};
+
         int32_t finalWidth  = 0;
         int32_t finalHeight = 0;
 

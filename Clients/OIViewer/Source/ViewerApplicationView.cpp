@@ -468,9 +468,8 @@ namespace OIV
 
         if (size.x > 0 && size.y > 0 && clientArea.has_value())  // window might be minimized or unconfigured.
         {
-            const LWS::ContentScale scale          = clientArea->Scale();
-            fDPIadjustmentFactor                   = {scale.x, scale.y};
-            fCurrentMonitorProperties.contentScale = scale;
+            const LWS::ContentScale scale = clientArea->Scale();
+            fDPIadjustmentFactor          = {scale.x, scale.y};
             fLabelManager.SetContentScale(scale);
             fRenderGateway->SetViewportSize(*clientArea);
             // UpdateCanvasSize();

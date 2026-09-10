@@ -603,8 +603,8 @@ namespace OIV
         textImage->SetImageRenderMode(OIV_Image_Render_mode::IRM_MainImage);
         textImage->SetVisible(true);
         textImage->SetOpacity(1.0);
-        textImage->SetDPI(static_cast<uint32_t>(std::lround(fCurrentMonitorProperties.contentScale.x * 96.0)),
-                          static_cast<uint32_t>(std::lround(fCurrentMonitorProperties.contentScale.y * 96.0)));
+        textImage->SetDPI(static_cast<uint32_t>(std::lround(fDPIadjustmentFactor.x * 96.0)),
+                          static_cast<uint32_t>(std::lround(fDPIadjustmentFactor.y * 96.0)));
         textImage->SetFontPath(LabelManager::sFontPath);
         textImage->SetFontSize(10);
         textImage->SetOutlineWidth(0);

@@ -70,6 +70,7 @@ namespace OIV
     };
 
     class ViewerMouseInput;
+    struct WindowSizeDecision;
     enum class ImageSizeType
     {
         Original,
@@ -333,6 +334,7 @@ namespace OIV
         [[nodiscard]] int GetRawNavigationDirection() const;
         void InitializeNotificationIcons();
         void InitializeRenderer();
+        [[nodiscard]] WindowSizeDecision GetWindowSizeDecision(const CommandManager::CommandArgs& args) const;
         [[nodiscard]] LWS::Rect GetNotificationIconRect(LWS::NotificationIconGroup::IconID iconId) const;
         [[nodiscard]] static LLUtils::native_string_type GetApplicationModulePath();
 

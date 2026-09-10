@@ -53,6 +53,7 @@ namespace OIV
         None,
         Fullscreen,
         MultiFullscreen,
+        Maximized,
         Windowed
     };
 

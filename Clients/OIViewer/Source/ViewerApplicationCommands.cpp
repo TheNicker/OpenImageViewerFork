@@ -387,17 +387,7 @@ namespace OIV
     void ViewerApplication::CMD_SetWindowSize(const CommandManager::CommandRequest& request,
                                               CommandManager::CommandResult& result)
     {
-        const auto& workRect               = fCurrentMonitorProperties.workRect;
-        const auto workAreaTopLeft         = workRect.GetCorner(LLUtils::TopLeft);
-        const auto workAreaBottomRight     = workRect.GetCorner(LLUtils::BottomRight);
-        const WindowWorkingArea workArea   = {.left   = workAreaTopLeft.x,
-                                              .top    = workAreaTopLeft.y,
-                                              .right  = workAreaBottomRight.x,
-                                              .bottom = workAreaBottomRight.y};
-        const LWS::LogicalSize currentSize = fWindow.GetWindow().GetClientSize();
-        const WindowSizeDecision decision  = ViewCommandPolicy::DecideWindowSize(
-            request.args, {currentSize.x, currentSize.y}, fWindow.GetWindow().GetPosition().value_or(LWS::Point{}),
-            workArea);
+        const WindowSizeDecision decision = GetWindowSizeDecision(request.args);
 
         switch (decision.mode)
         {
@@ -407,14 +397,21 @@ namespace OIV
             case WindowSizeMode::MultiFullscreen:
                 std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::FullscreenAllMonitors);
                 break;
+            case WindowSizeMode::Maximized:
+                // Use native maximization for "Window size entire screen" to preserve the normal restore placement.
+                // Resizing to the monitor bounds would also fill the usable area, but overwrite that placement
+                // and lose the expected maximize/restore behavior.
+                std::ignore = fWindow.GetWindow().RequestMaximize();
+                break;
             case WindowSizeMode::Windowed:
-                if (fWindow.GetWindow().GetWindowMode() != LWS::WindowMode::Windowed)
-                    std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::Windowed);
+                std::ignore = fWindow.GetWindow().SetWindowMode(LWS::WindowMode::Windowed);
+                std::ignore = fWindow.GetWindow().RequestShowState(LWS::WindowShowState::Restored);
 
-                if (decision.position != fWindow.GetWindow().GetPosition().value_or(LWS::Point{}))
-                    std::ignore = fWindow.GetWindow().SetPosition(decision.position);
-
-                std::ignore = fWindow.GetWindow().RequestClientSize({decision.size.x, decision.size.y});
+                std::ignore = fWindow.GetWindow().SetPlacement(
+                    {.position   = fPlatform.Supports(LWS::PlatformFeature::AbsoluteWindowPosition).value_or(false)
+                                       ? std::optional(decision.position)
+                                       : std::nullopt,
+                     .clientSize = {decision.size.x, decision.size.y}});
                 break;
             case WindowSizeMode::None:
                 break;
