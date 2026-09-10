@@ -219,41 +219,6 @@ TEST_CASE("Bounded copies preserve overlap and trust view lengths", "[string][ut
     CHECK(std::string_view(bytes) == "xyz");
 }
 
-TEST_CASE("Extensions use native filename components", "[string][path]")
-{
-    const std::array<std::pair<std::string_view, std::string_view>, 11> cases{{{"/images.v1/photo"sv, ""sv},
-                                                                               {"/images/.profile"sv, ""sv},
-                                                                               {"/images/.profile.png"sv, "png"sv},
-                                                                               {"photo.tar.gz"sv, "gz"sv},
-                                                                               {"photo."sv, ""sv},
-                                                                               {""sv, ""sv},
-                                                                               {"/directory.ext/"sv, ""sv},
-                                                                               {"."sv, ""sv},
-                                                                               {".."sv, ""sv},
-                                                                               {"/images/.."sv, ""sv},
-                                                                               {"...png"sv, "png"sv}}};
-    for (const auto& [path, extension] : cases)
-    {
-        CAPTURE(path);
-        CHECK(StringUtility::GetFileExtension(path) == extension);
-        CHECK(StringUtility::GetFileExtension(std::string(path)) == extension);
-        CHECK(StringUtility::GetFileExtension(StringUtility::ConvertString<std::u8string>(path)) ==
-              StringUtility::ConvertString<std::u8string>(extension));
-        CHECK(StringUtility::GetFileExtension(StringUtility::ConvertString<std::wstring>(path)) ==
-              StringUtility::ConvertString<std::wstring>(extension));
-    }
-#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
-    CHECK(StringUtility::GetFileExtension(R"(C:\images.v1\photo)"sv).empty());
-    CHECK(StringUtility::GetFileExtension("C:.profile"sv).empty());
-    CHECK(StringUtility::GetFileExtension("C:.profile.png"sv) == "png");
-    CHECK(StringUtility::GetFileExtension(R"(\\server.name)"sv).empty());
-    CHECK(StringUtility::GetFileExtension(R"(\\server.name\share\file.png)"sv) == "png");
-#else
-    CHECK(StringUtility::GetFileExtension(R"(dir.ext\file)"sv) == R"(ext\file)"sv);
-    CHECK(StringUtility::GetFileExtension("C:.profile"sv) == "profile");
-#endif
-}
-
 TEST_CASE("Direct splitting preserves stream token semantics", "[string]")
 {
     const auto reference = [](const auto& source, auto delimiter)

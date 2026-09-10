@@ -19,9 +19,11 @@ builds (`/O2` and `-O3`), not Debug timings.
   scalar boundaries, malformed Unicode, byte-preserving copies, moved storage, and locale independence.
 - Bounded-copy tests cover zero/one/exact/truncated capacities, UTF-8 and UTF-16 boundaries, overlap, termination,
   no padding, and nonterminated source views. Inputs satisfy the valid-Unicode, NUL-free contract.
-- Extension cases cover directories, dotfiles, roots, and native separators. A separate oracle matched 1,512
-  ordinary lexical paths against std::filesystem on each platform; alternate-data-stream syntax is outside scope. Direct splitting matches the previous
-  stream behavior, including trailing-NUL removal and originally nonempty all-NUL tokens. Trimming retains coverage.
+- The former extension-helper tests and benchmark were retired with the API. Decoder-selection coverage exercises
+  standard filesystem extensions with Unicode names, uppercase extensions, dotfiles, and dotted parent directories,
+  with plugin fallback disabled. Linux also checks a native filename containing a non-UTF-8 byte.
+- Direct splitting matches the previous stream behavior, including trailing-NUL removal and originally nonempty
+  all-NUL tokens. Trimming retains coverage.
 - A Python Unicode oracle supplied all 1,112,064 scalar values, including NUL, as UTF-8/UTF-16/UTF-32. All applicable
   conversion directions matched on both platforms. Every two-byte combination (65,536 inputs) was checked against
   independently classified valid UTF-8. Linux ran this probe with address and undefined-behavior sanitizers.
@@ -49,6 +51,9 @@ rotate implementation order, consume the results, and report median nanoseconds 
 intentionally different guarantees: the new function requires a valid, NUL-free view and appends a terminator,
 while the original scans/pads and may leave truncated output unterminated.
 
+The filesystem migration is a simplicity tradeoff: path construction may allocate and is not included in these
+StringUtility timings. The removed custom extension parser is no longer part of the benchmark.
+
 These are local helper measurements, not viewer frame-rate claims. Sub-nanosecond differences in the small Linux
 copy cases are within observed run-to-run variation. Large copies and conversion/splitting show clear improvements;
 no repeatable regression remained in the sampled workloads.
@@ -70,15 +75,8 @@ no repeatable regression remained in the sampled workloads.
 | copy truncated UTF8 | 8.8 → 4.6 | 3.8 → 3.9 |
 | copy truncated wide | 11.8 → 4.9 | 5.0 → 3.9 |
 | split 64/80/72 | 1069.9 → 179.9 | 145.8 → 42.1 |
-| extension short | 3.2 → 2.3 | 1.8 → 1.8 |
-| extension long basename | 2.1 → 2.1 | 1.7 → 1.7 |
-| extension nested path | 2.1 → 2.1 | 1.7 → 1.7 |
 | lower short | 230.9 → 21.6 | 35.0 → 7.9 |
 | lower long | 33165.8 → 146.6 | 3044.2 → 153.7 |
-
-Extension rows use a separate isolated run with one million calls per batch, avoiding background-build noise
-in these very short operations. The backward suffix scan replaced a provisional implementation that took about
-69 ns for a long basename on Linux; the final implementation matched the original routine at about 1.7 ns.
 
 Heap-sized transcoding samples dropped from two allocations to one. Copying and same-type moves allocate nothing.
 Splitting the three long tokens used 13 → 6 total allocation calls on Windows and 9 → 6 on Linux, including vector

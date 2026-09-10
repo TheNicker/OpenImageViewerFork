@@ -47,6 +47,12 @@ ASCII casing changes only A-Z/a-z and preserves non-ASCII code units. It does no
 
 ## Integration boundaries
 
+ImageCodec uses `std::filesystem::path::extension()` to select a decoder and strips the leading dot. The duplicate
+StringUtility path parser has been removed. Extension parsing converts explicitly to and from the filesystem's
+native string representation, interpreting UTF-8 in narrow Windows configurations and preserving native filename
+bytes on Linux. Filesystem
+path objects may allocate; this standard-library implementation replaces the bespoke parser for simplicity.
+
 Renderer adapter names are UTF-8. D3D11 descriptions enter through UTF-16 and are explicitly encoded. System
 information converts backend text to the native representation. LLUtils replaces OIVShared's duplicate UTF-8
 helpers. The build selects one authoritative LLUtils implementation despite older nested dependency copies.

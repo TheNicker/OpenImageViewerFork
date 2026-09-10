@@ -225,15 +225,6 @@ void measureSplit()
     if (allocations != before || moved.data() != storage)
         std::abort();
 }
-NOINLINE std::string_view oldExtension(std::string_view value)
-{
-    const auto dot = value.find_last_of('.');
-    return dot == value.npos ? std::string_view{} : value.substr(dot + 1);
-}
-NOINLINE std::string_view newExtension(std::string_view value)
-{
-    return LLUtils::StringUtility::GetFileExtension(value);
-}
 NOINLINE std::string oldLower(const std::string& value)
 {
     auto result = value;
@@ -320,9 +311,6 @@ int main()
     measureCopy("copy truncated UTF8", text, 128, 100000);
     measureCopy("copy truncated wide", wide, 64, 100000);
     measureSplit();
-    measureUtility("extension short", "photo.png", oldExtension, newExtension);
-    measureUtility("extension long basename", std::string(240, 'a') + ".png", oldExtension, newExtension);
-    measureUtility("extension nested path", std::string(200, 'a') + "/photo.png", oldExtension, newExtension);
     measureUtility("lower short", std::string(32, 'A'), oldLower, newLower);
     measureUtility("lower long", std::string(4096, 'A'), oldLower, newLower);
     std::printf("checksum,%zu\n", sink);
