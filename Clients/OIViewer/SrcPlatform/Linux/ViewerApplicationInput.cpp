@@ -56,7 +56,7 @@ namespace OIV
         }
         if (const auto* wheel = std::get_if<LWS::EventMouseWheel>(&eventData))
         {
-            fMouseInput->Wheel(wheel->steps());
+            fMouseInput->Wheel(wheel->steps(), fWindow.GetCanvasWindow().IsMouseInClientRect());
             return 1;
         }
 

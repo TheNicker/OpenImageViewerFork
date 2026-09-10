@@ -36,7 +36,17 @@ namespace OIV
         }
         owner.fMouseInput->Move({mouse.deltaX, mouse.deltaY});
         if (mouse.wheelDelta != 0)
-            owner.fMouseInput->Wheel(static_cast<double>(mouse.wheelDelta) / LWS::EventMouseWheel::DeltaPerStep);
+        {
+            // Background raw input also arrives when another window covers the canvas. Compare root windows so
+            // the viewer's canvas child is accepted, while an overlying window blocks uncaptured wheel actions.
+            POINT cursor{};
+            const HWND window      = LWS::Win32::GetHwnd(owner.fWindow.GetWindow()).value_or(nullptr);
+            const bool mouseInside = window != nullptr && GetCursorPos(&cursor) != FALSE &&
+                                     GetAncestor(WindowFromPoint(cursor), GA_ROOT) == window &&
+                                     owner.fWindow.GetCanvasWindow().IsMouseInClientRect();
+            owner.fMouseInput->Wheel(static_cast<double>(mouse.wheelDelta) / LWS::EventMouseWheel::DeltaPerStep,
+                                     mouseInside);
+        }
     }
     void ViewerApplication::InitializeRawInput()
     {
