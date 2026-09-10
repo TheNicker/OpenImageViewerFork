@@ -1,4 +1,17 @@
-// Standalone optimized benchmark. See docs/StringEncodingValidation.md for build commands.
+// Standalone optimized benchmark; run from the repository root after configuring the build directory.
+// Windows requires a Visual Studio development shell with clang-cl on PATH.
+// clang-format off
+// clang-cl /nologo /std:c++23preview /O2 /EHsc /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS /IExternal/LLUtils/Include Tests/Benchmarks/StringUtilityBenchmark.cpp /Febuild/windows-clang/string-benchmark.exe /Fobuild/windows-clang/string-benchmark.obj
+// ./build/windows-clang/string-benchmark.exe
+// clang++ -std=c++23 -O3 -IExternal/LLUtils/Include Tests/Benchmarks/StringUtilityBenchmark.cpp -o build/linux-clang/string-benchmark
+// build/linux-clang/string-benchmark
+// clang-format on
+// Seven batches rotate implementation order, consume results, and report median ns/call plus allocations.
+// Both converters receive identical valid, NUL-free text under a UTF-8 locale; malformed input is not timed.
+// Copy guarantees differ: strncpy/wcsncpy scan and pad, and may omit a terminator; StrCpy trusts a valid
+// NUL-free view and appends a terminator without padding. Same-type moves reuse existing storage.
+// These helper timings exclude filesystem-extension costs and do not establish viewer frame-rate gains
+// or a comparison against equivalent Win32 Unicode APIs. Measurements are observations, not test thresholds.
 #include <LLUtils/StringUtility.h>
 #include <algorithm>
 #include <array>

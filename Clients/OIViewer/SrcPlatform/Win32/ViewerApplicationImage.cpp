@@ -78,6 +78,7 @@ namespace OIV
             LoadOivImage(std::make_shared<OIVBaseImage>(ImageSource::Clipboard, image));
             clipboardType = ClipboardDataType::Image;
         }
+        // Clipboard buffers are untrusted: require whole UTF-16 units and a terminator inside the buffer.
         else if (formatType == CF_UNICODETEXT && buffer.size() >= sizeof(wchar_t) &&
                  buffer.size() % sizeof(wchar_t) == 0)
         {

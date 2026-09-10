@@ -4,6 +4,9 @@
 #include <clocale>
 #include <sstream>
 
+// OIViewer text uses UTF-8 in char/char8_t and UTF-16 at native Windows interfaces.
+// Encoding follows this application contract, so locale changes must not reinterpret the same bytes.
+// Native Linux filenames can contain non-UTF-8 bytes; preserve paths and transcode only Unicode text.
 using LLUtils::StringUtility;
 using namespace std::string_view_literals;
 using namespace std::string_literals;
@@ -163,6 +166,9 @@ TEST_CASE("Renderer conversion and ASCII casing are independent of the C locale"
     }
 }
 
+// StrCpy trusts valid, NUL-free input and its supplied length; it checks only the cutoff boundary.
+// Truncation preserves code points, but can split a grapheme cluster. It never scans for a terminator or pads the
+// destination.
 TEST_CASE("Bounded copies terminate without splitting code points or padding", "[string][utf8]")
 {
     const auto check = []<class Char>(std::basic_string_view<Char> source)

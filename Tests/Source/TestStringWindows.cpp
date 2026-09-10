@@ -27,7 +27,8 @@ TEST_CASE("Windows error text uses Unicode independently of the C locale", "[str
     CHECK(LLUtils::PlatformUtility::GetLastErrorAsString<char>().empty());
 }
 
-// Explicit integration run: the harness preserves/restores the desktop clipboard.
+// Explicit run: tests.exe "[clipboard]". This test changes the desktop clipboard;
+// use an external harness to snapshot and restore its contents. Hidden from the default suite.
 TEST_CASE("Clipboard publishes Unicode and Windows synthesizes legacy text", "[.][clipboard][win32]")
 {
     REQUIRE(LWS::Win32::BootstrapProcess() == LWS::Result::Success);

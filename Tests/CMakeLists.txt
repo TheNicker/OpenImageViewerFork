@@ -1,4 +1,10 @@
 
+# Validate Debug/Ninja builds in build/windows-clang (Visual Studio dev shell) and build/linux-clang (WSL).
+# Build with: cmake --build build/windows-clang  OR  cmake --build build/linux-clang
+# Run tests, tests_font_encoding, and tests_vk_failures from that build's bin/ directory;
+# Windows also runs tests_vk_runtime_failure, with .exe suffixes on all four executables.
+# Renderer-policy changes need defaults, each renderer alone, Windows all-renderer, and test-only Null checks.
+# Restore the default renderer configuration afterward; CPU/software runs do not prove hardware presentation.
 file(GLOB_RECURSE sourceFiles CONFIGURE_DEPENDS
     "./Source/*.h"
     "./Source/*.cpp"

@@ -54,7 +54,7 @@ installed desktop-file metadata rather than an icon attached to the window.
 ### Text encoding
 
 Text uses UTF-8 on Linux and UTF-16 at wide Windows interfaces. String conversion is locale-independent;
-see the [encoding policy and design rationale](docs/StringEncoding.md).
+see the [StringUtility contracts](External/LLUtils/Include/LLUtils/StringUtility.h) and [encoding checks](Tests/Source/TestUtf8.cpp).
 
 ### Windows Runtime Notes
 
@@ -149,9 +149,9 @@ Renderer names are case-insensitive. Help lists only compiled backends; the old 
 
 Adapter selection is supported by D3D11 and Vulkan. Names match vendor IDs or GPU-name substrings ignoring ASCII case. Indices are zero-based and specific to the selected API; an index overrides a supplied name and disables fallback. GL uses the platform-selected adapter and rejects explicit adapter options. Deprecated --adapter and --gpu options are rejected.
 
-Quoted Unicode paths are preserved. Unquoted positional tokens are joined with spaces; use -- before a path beginning with a dash. On Windows, explicit graphics options start a new instance rather than forwarding to an existing tray instance. Help/version/errors use the parent console or redirected streams without opening a console window.
+Quoted Unicode paths are preserved. Unquoted positional tokens are joined with spaces; use -- before a path beginning with a dash. On Windows, explicit graphics options start a new instance rather than forwarding to an existing tray instance. Windows terminal launches use the existing console or redirected streams, and the shell waits until the process exits. Desktop viewer launches detach a console created solely for them, which may briefly appear.
 
-Press **Shift+Tilde** for system information; plain Tilde retains image information. See [integration notes](docs/CLI11Integration.md) for ownership and startup details.
+Press **Shift+Tilde** for system information; plain Tilde retains image information.
 
 ## Renderer selection
 
@@ -159,4 +159,4 @@ Windows builds enable Vulkan and D3D11 by default; GL is optional. Linux builds 
 
 Automatic startup prefers hardware, then unknown acceleration, then software. API order within each group is Vulkan, D3D11 (Windows), then GL, skipping backends that were not built. `--renderer` fixes the API. `--adapter_name` matches vendor/name text; `--adapter_index` overrides the name, uses the selected or default built API, and disables fallback. GL cannot explicitly select an adapter. Use `--help` for the choices in your build.
 
-[Renderer build, runtime, adapter-selection, and CLI policy](docs/CLI11Integration.md) documents dependencies, examples, diagnostics, and the distinction between the default API and the successfully selected renderer.
+Developer contracts live beside [renderer options](OIVLib/OIV/Include/Interfaces/RendererOptions.h) and [startup selection](OIVLib/OIV/Source/RendererSelection.h). Use `OIViewer --help` for available choices and examples.

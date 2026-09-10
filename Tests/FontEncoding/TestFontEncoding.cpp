@@ -62,6 +62,8 @@ TEST_CASE("Font loading keeps code-page handling at the native file boundary", "
 }
 
 #if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
+// Run this hidden case in a separate executable with a UTF-8 activeCodePage manifest.
+// Changing LC_CTYPE does not change the Windows file API code page.
 TEST_CASE("UTF-8 process manifest selects the UTF-8 file code page", "[.][font-utf8-acp]")
 {
     REQUIRE(GetACP() == CP_UTF8);
