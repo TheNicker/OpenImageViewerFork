@@ -71,6 +71,7 @@ namespace OIV
         contextParams.width            = fViewportSize[0] > 0.0F ? static_cast<int>(fViewportSize[0]) : DefaultWidth;
         contextParams.height           = fViewportSize[1] > 0.0F ? static_cast<int>(fViewportSize[1]) : DefaultHeight;
         contextParams.gpuIndex         = initParams.gpuIndex;
+        contextParams.adapterName      = initParams.adapterName;
 
         fContext.Init(contextParams);
 

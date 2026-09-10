@@ -25,6 +25,7 @@ namespace OIV
         int RemoveRenderable(IRenderable* renderable) override;
 
         const char* GetBackendName() const override { return "D3D11"; }
+        int GetSelectedGPUIndex() const override;
         const char* GetGPUName() const override;
         const char* GetAPIVersion() const override;
         const char* GetDriverVersion() const override;

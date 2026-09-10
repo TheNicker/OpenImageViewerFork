@@ -65,7 +65,7 @@
 
 namespace OIV
 {
-    void ViewerApplication::Init(LLUtils::native_string_type relativeFilePath)
+    void ViewerApplication::Init(LLUtils::native_string_type relativeFilePath, const RendererOptions& rendering)
     {
         using namespace std;
         using namespace placeholders;
@@ -206,7 +206,7 @@ namespace OIV
         // Stop LWS buffer attachments before the renderer takes ownership of the canvas. On Wayland,
         // a background buffer committed after Vulkan enables explicit sync has no acquire/release points.
         std::ignore = fWindow.GetCanvasWindow().SetEraseBackground(false);
-        InitializeRenderer();
+        InitializeRenderer(rendering);
 
         // Update oiv lib client size
         UpdateWindowSize();

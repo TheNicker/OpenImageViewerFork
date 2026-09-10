@@ -31,6 +31,7 @@ namespace OIV
             int width;
             int height;
             int gpuIndex;
+            const char* adapterName = nullptr;
         };
 
         VKContext();
@@ -59,7 +60,7 @@ namespace OIV
 
         void CreateInstance();
         void CreateSurface(void* nativeDisplay, std::uintptr_t window);
-        void PickPhysicalDevice();
+        void PickPhysicalDevice(const char* adapterName);
         bool IsPhysicalDeviceSuitable(VkPhysicalDevice device, uint32_t& graphicsQueueFamily,
                                       uint32_t& presentQueueFamily) const;
         void CreateLogicalDevice();

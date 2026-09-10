@@ -12,7 +12,6 @@
 #include "Interfaces/IRendererDefs.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <mutex>
@@ -32,19 +31,6 @@
 
 namespace OIV
 {
-    std::string OIV::sPreferredRenderer;
-    int OIV::sPreferredGPUIndex = -1;
-
-    void OIV::SetPreferredRenderer(const char* name)
-    {
-        sPreferredRenderer = name ? name : "";
-    }
-
-    void OIV::SetPreferredGPUIndex(int index)
-    {
-        sPreferredGPUIndex = index;
-    }
-
     namespace
     {
         OIVString GetRendererDataRoot()
@@ -111,73 +97,101 @@ namespace OIV
         return rotation;
     }
 
-    IRendererSharedPtr OIV::CreateBestRenderer()
+    static const char* GetRendererName(RendererType renderer)
     {
-        if (!sPreferredRenderer.empty())
+        switch (renderer)
         {
-            std::string pref = sPreferredRenderer;
-            std::transform(pref.begin(), pref.end(), pref.begin(),
-                           [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
-
-            if (pref == "vulkan")
-            {
-#if OIV_BUILD_RENDERER_VK == 1
-                return VKRendererFactory::Create();
-#else
-                throw std::runtime_error("Vulkan renderer not compiled in");
-#endif
-            }
-            else if (pref == "opengl" || pref == "gl")
-            {
-#if OIV_BUILD_RENDERER_GL == 1
-                return GLRendererFactory::Create();
-#else
-                throw std::runtime_error("OpenGL renderer not compiled in");
-#endif
-            }
-            else if (pref == "d3d11" || pref == "direct3d11" || pref == "directx")
-            {
-#if OIV_BUILD_RENDERER_D3D11 == 1
-                return D3D11RendererFactory::Create();
-#else
-                throw std::runtime_error("D3D11 renderer not compiled in");
-#endif
-            }
-            else if (pref == "null")
-            {
-#if OIV_ALLOW_NULL_RENDERER == 1
-                return IRendererSharedPtr(new NullRenderer());
-#else
-                throw std::runtime_error("Null renderer not available");
-#endif
-            }
-
-            throw std::invalid_argument("Unknown renderer: " + sPreferredRenderer);
+            case RendererType::OpenGL:
+                return "GL";
+            case RendererType::D3D11:
+                return "D3D11";
+            case RendererType::Vulkan:
+                return "Vulkan";
+            case RendererType::Null:
+                return "Null";
         }
+        return "Unknown";
+    }
 
-#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
-    #if OIV_BUILD_RENDERER_D3D11 == 1
-        return D3D11RendererFactory::Create();
-    #elif OIV_BUILD_RENDERER_VK == 1
-        return VKRendererFactory::Create();
-    #elif OIV_BUILD_RENDERER_GL == 1
-        return GLRendererFactory::Create();
-    #elif OIV_ALLOW_NULL_RENDERER == 1
-        return IRendererSharedPtr(new NullRenderer());
-    #else
-        #error No valid Renderers detected.
-    #endif
-#else
-    #if OIV_BUILD_RENDERER_VK == 1
-        return VKRendererFactory::Create();
-    #elif OIV_BUILD_RENDERER_GL == 1
-        return GLRendererFactory::Create();
-    #elif OIV_ALLOW_NULL_RENDERER == 1
-        return IRendererSharedPtr(new NullRenderer());
-    #else
-        #error No valid Renderers detected.
-    #endif
+    bool IsRendererAvailable(RendererType renderer)
+    {
+        switch (renderer)
+        {
+#if OIV_BUILD_RENDERER_D3D11 == 1
+            case RendererType::D3D11:
+                return true;
 #endif
+#if OIV_BUILD_RENDERER_VK == 1
+            case RendererType::Vulkan:
+                return true;
+#endif
+#if OIV_BUILD_RENDERER_GL == 1
+            case RendererType::OpenGL:
+                return true;
+#endif
+#if OIV_ALLOW_NULL_RENDERER == 1
+            case RendererType::Null:
+                return true;
+#endif
+            default:
+                return false;
+        }
+    }
+
+    RendererType GetDefaultRenderer()
+    {
+#if defined(_WIN32) && OIV_BUILD_RENDERER_D3D11 == 1
+        return RendererType::D3D11;
+#elif OIV_BUILD_RENDERER_VK == 1
+        return RendererType::Vulkan;
+#elif OIV_BUILD_RENDERER_GL == 1
+        return RendererType::OpenGL;
+#else
+        return RendererType::Null;
+#endif
+    }
+
+    std::string ValidateRendererOptions(const RendererOptions& options)
+    {
+        const auto renderer = options.renderer.value_or(GetDefaultRenderer());
+        std::string error;
+        if (!IsRendererAvailable(renderer))
+            error = std::string(GetRendererName(renderer)) + " renderer is not available in this build";
+        else if (options.adapter && options.adapterIndex)
+            error = "--adapter and --adapter_index are mutually exclusive";
+        else if (options.adapter && options.adapter->empty())
+            error = "--adapter requires a nonempty adapter name";
+        else if (options.adapterIndex && *options.adapterIndex < 0)
+            error = "--adapter_index must be nonnegative";
+        else if ((options.adapter || options.adapterIndex) &&
+                 (renderer == RendererType::OpenGL || renderer == RendererType::Null))
+            error = "Explicit adapter selection requires D3D11 or Vulkan; GL uses the platform-selected adapter";
+        return error;
+    }
+
+    IRendererSharedPtr OIV::CreateRenderer(RendererType renderer)
+    {
+        switch (renderer)
+        {
+#if OIV_BUILD_RENDERER_D3D11 == 1
+            case RendererType::D3D11:
+                return D3D11RendererFactory::Create();
+#endif
+#if OIV_BUILD_RENDERER_VK == 1
+            case RendererType::Vulkan:
+                return VKRendererFactory::Create();
+#endif
+#if OIV_BUILD_RENDERER_GL == 1
+            case RendererType::OpenGL:
+                return GLRendererFactory::Create();
+#endif
+#if OIV_ALLOW_NULL_RENDERER == 1
+            case RendererType::Null:
+                return std::make_shared<NullRenderer>();
+#endif
+            default:
+                LL_EXCEPTION(LLUtils::Exception::ErrorCode::BadParameters, "Requested renderer is not available");
+        }
     }
 
     IMCodec::ImageSharedPtr OIV::Resample(IMCodec::ImageSharedPtr sourceImage, LLUtils::PointI32 targetSize)
@@ -542,7 +556,7 @@ namespace OIV
         return result;*/
     }
 
-    int OIV::Init()
+    int OIV::Init(const RendererOptions& options)
     {
         static_assert(OIV_TexelFormat::TF_COUNT == static_cast<OIV_TexelFormat>(IMCodec::TexelFormat::COUNT),
                       "Wrong array size");
@@ -563,7 +577,9 @@ namespace OIV
                 }
             });
 
-        fRenderer = CreateBestRenderer();
+        if (const auto error = ValidateRendererOptions(options); !error.empty())
+            throw std::invalid_argument(error);
+        fRenderer = CreateRenderer(options.renderer.value_or(GetDefaultRenderer()));
 
         const auto initializeRenderer = [&]()
         {
@@ -577,7 +593,8 @@ namespace OIV
             params.container            = fParent;
             params.nativeDisplay        = fNativeDisplay;
             params.dataPath             = appDataPath.c_str();
-            params.gpuIndex             = sPreferredGPUIndex;
+            params.gpuIndex             = options.adapterIndex.value_or(-1);
+            params.adapterName          = options.adapter ? options.adapter->c_str() : nullptr;
             fRenderer->Init(params);
         };
 
@@ -588,7 +605,7 @@ namespace OIV
         }
         catch (...)
         {
-            if (!sPreferredRenderer.empty())
+            if (options.renderer || options.adapter || options.adapterIndex)
                 throw;
             fRenderer = GLRendererFactory::Create();
             initializeRenderer();

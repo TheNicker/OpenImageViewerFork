@@ -17,7 +17,8 @@ namespace OIV
         virtual ~IViewerRenderPort() = default;
 
         // Bind the native canvas before configuration; SetViewportSize supplies confirmed dimensions later.
-        virtual void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr)         = 0;
+        virtual void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr,
+                                const RendererOptions& rendering = {})                           = 0;
         virtual void ResumePresentation()                                                        = 0;
         virtual ResultCode Refresh()                                                             = 0;
         virtual void SetSelectionRect(const LLUtils::RectI32& rect)                              = 0;
@@ -49,10 +50,11 @@ namespace OIV
                 OIVCommands::ExecuteCommand(OIV_CMD_Destroy, &OIVCommands::NullCommand, &OIVCommands::NullCommand);
         }
 
-        void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr) override
+        void Initialize(std::size_t canvasHandle, void* nativeDisplay = nullptr,
+                        const RendererOptions& rendering = {}) override
         {
             fInitializationAttempted = true;
-            OIVCommands::Init(canvasHandle, nativeDisplay);
+            OIVCommands::Init(canvasHandle, nativeDisplay, rendering);
         }
 
         ResultCode Refresh() override

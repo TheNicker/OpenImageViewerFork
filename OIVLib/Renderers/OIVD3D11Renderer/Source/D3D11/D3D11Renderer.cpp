@@ -246,8 +246,8 @@ LLUTILS_DISABLE_WARNING_POP
     {
         fDataPath = initParams.dataPath;
         fDevice = std::make_shared<D3D11Device>();
-        fDevice->Create(reinterpret_cast<HWND>(initParams.container));
-        
+        fDevice->Create(reinterpret_cast<HWND>(initParams.container), initParams.gpuIndex, initParams.adapterName);
+
         ResizeBackBuffer(1280, 800);
         CreateShaders();
         CreateBuffers();

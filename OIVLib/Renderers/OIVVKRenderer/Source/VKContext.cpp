@@ -1,5 +1,6 @@
 #include "VKContext.h"
 #include "VKCommon.h"
+#include <Interfaces/RendererOptions.h>
 
 #include <algorithm>
 #include <cstring>
@@ -29,7 +30,7 @@ namespace OIV
 
         CreateInstance();
         CreateSurface(params.nativeDisplay, params.window);
-        PickPhysicalDevice();
+        PickPhysicalDevice(params.adapterName);
         CreateLogicalDevice();
         CreateSwapChain(params.width, params.height);
         CreateCommandPool();
@@ -168,7 +169,7 @@ namespace OIV
         fSurface = surface;
     }
 
-    void VKContext::PickPhysicalDevice()
+    void VKContext::PickPhysicalDevice(const char* adapterName)
     {
         uint32_t deviceCount{0};
         CheckVkResult(vkEnumeratePhysicalDevices(fInstance, &deviceCount, nullptr),
@@ -181,19 +182,20 @@ namespace OIV
         CheckVkResult(vkEnumeratePhysicalDevices(fInstance, &deviceCount, devices.data()),
                       "Failed to enumerate Vulkan physical devices");
 
-        const bool requested = fGpuIndex >= 0 && fGpuIndex < static_cast<int>(devices.size());
+        const bool requested = fGpuIndex >= 0 || adapterName != nullptr;
         if (fGpuIndex >= static_cast<int>(devices.size()))
-            std::cerr << "[VK] Warning: --gpu=" << fGpuIndex << " out of range (" << devices.size()
-                      << " GPUs available)" << std::endl;
+            throw std::invalid_argument("--adapter_index is outside the Vulkan adapter list");
 
         VkPhysicalDeviceProperties selectedProperties{};
         int selectedIndex  = -1;
-        const size_t first = requested ? static_cast<size_t>(fGpuIndex) : 0;
-        const size_t end   = requested ? first + 1 : devices.size();
+        const size_t first = fGpuIndex >= 0 ? static_cast<size_t>(fGpuIndex) : 0;
+        const size_t end   = fGpuIndex >= 0 ? first + 1 : devices.size();
         for (size_t i = first; i < end; ++i)
         {
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(devices[i], &properties);
+            if (adapterName != nullptr && !detail::AdapterNameMatches(adapterName, properties.deviceName))
+                continue;
             // Descriptor pool growth relies on Vulkan 1.1's recoverable out-of-pool result.
             if (properties.apiVersion < VK_API_VERSION_1_1)
                 continue;
@@ -212,13 +214,13 @@ namespace OIV
                 selectedIndex        = static_cast<int>(i);
                 selectedProperties   = properties;
             }
-            if (discrete)
+            if (requested || discrete)
                 break;
         }
 
         if (selectedIndex < 0)
             throw std::runtime_error(
-                requested ? "The requested GPU requires Vulkan 1.1 and window presentation support"
+                requested ? "The requested adapter was not found or does not support Vulkan 1.1 and window presentation"
                           : "Failed to find a Vulkan 1.1 GPU that can render and present to this window");
 
         fGpuIndex          = selectedIndex;

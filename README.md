@@ -129,3 +129,21 @@ build\bin\tests.exe
 ## License
 
 OIV is distributed under the [OpenImageViewer License](LICENSE.md).
+
+## Command line
+
+```text
+OIViewer [--renderer=GL|D3D11|Vulkan] [--adapter="adapter name" | --adapter_index=n] [--] [image or folder]
+OIViewer --renderer=Vulkan --adapter_index=1 "photos/cat.jpg"
+OIViewer --renderer=D3D11 --adapter="Intel(R) Graphics"
+OIViewer --help
+OIViewer --version
+```
+
+Renderer names are case-insensitive; OpenGL is also accepted as GL. Only compiled backends are available. Automatic startup prefers D3D11 on Windows and Vulkan on Linux (with GL fallback when available). Explicit graphics selections do not silently fall back.
+
+Adapter selection is supported by D3D11 and Vulkan. Names match exactly ignoring case; indices are zero-based and specific to the selected backend. GL uses the platform-selected adapter and rejects explicit adapter options. The old --gpu option is replaced by --adapter_index.
+
+Quoted Unicode paths are preserved. Unquoted positional tokens are joined with spaces; use -- before a path beginning with a dash. On Windows, explicit graphics options start a new instance rather than forwarding to an existing tray instance. Help/version/errors use the parent console or redirected streams without opening a console window.
+
+Press **Shift+Tilde** for system information; plain Tilde retains image information. See [integration notes](docs/CLI11Integration.md) for ownership and startup details.

@@ -1214,10 +1214,6 @@ TEST_CASE("Vulkan selects a presentable 1.1 device with stable enumeration indic
         requested = 1;
         expected  = 1;
     }
-    SECTION("Out-of-range index falls back to automatic selection")
-    {
-        requested = 99;
-    }
     SECTION("First suitable device is used when discrete GPUs cannot present")
     {
         driver.devices[2].presentSupport = false;
@@ -1426,4 +1422,28 @@ TEST_CASE("Vulkan retries failed first pipeline creation after zero-extent start
     CHECK(driver.views.empty());
     CHECK(driver.memory.empty());
     CHECK(driver.semaphores.empty());
+}
+
+TEST_CASE("Vulkan adapter selectors do not silently fall back", "[vulkan][selection]")
+{
+    driver = {};
+    SECTION("Index outside enumeration")
+    {
+        OIV::VKRenderer renderer;
+        REQUIRE_THROWS_AS(renderer.Init({.container = 1, .dataPath = OIV_TEXT("."), .gpuIndex = 99}),
+                          std::invalid_argument);
+    }
+    SECTION("Unknown name")
+    {
+        OIV::VKRenderer renderer;
+        REQUIRE_THROWS_AS(renderer.Init({.container = 1, .dataPath = OIV_TEXT("."), .adapterName = "missing adapter"}),
+                          std::runtime_error);
+    }
+    SECTION("Case-insensitive exact name")
+    {
+        OIV::VKRenderer renderer;
+        REQUIRE(renderer.Init({.container = 1, .dataPath = OIV_TEXT("."), .adapterName = "test gpu"}) == 0);
+        CHECK(renderer.GetSelectedGPUIndex() == 0);
+    }
+    CHECK(driver.objects.empty());
 }

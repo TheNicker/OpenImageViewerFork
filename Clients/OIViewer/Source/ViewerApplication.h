@@ -152,7 +152,7 @@ namespace OIV
         void OnLabelRefreshRequest();
         explicit ViewerApplication(LWS::PlatformContext& platform);
         ~ViewerApplication();
-        void Init(LLUtils::native_string_type filePath);
+        void Init(LLUtils::native_string_type filePath, const RendererOptions& rendering = {});
         void Run();
         static LLUtils::native_string_type GetAppDataFolder();
         static LWS::Handle FindTrayBarWindow();
@@ -334,7 +334,7 @@ namespace OIV
         void InitializeRawInput();
         [[nodiscard]] int GetRawNavigationDirection() const;
         void InitializeNotificationIcons();
-        void InitializeRenderer();
+        void InitializeRenderer(const RendererOptions& rendering);
         [[nodiscard]] WindowSizeDecision GetWindowSizeDecision(const CommandManager::CommandArgs& args) const;
         [[nodiscard]] LWS::Rect GetNotificationIconRect(LWS::NotificationIconGroup::IconID iconId) const;
         [[nodiscard]] static LLUtils::native_string_type GetApplicationModulePath();

@@ -6,6 +6,8 @@
 #include "D3D11Common.h"
 #include "D3D11Error.h"
 #include <cstdlib>
+#include <stdexcept>
+#include <Interfaces/RendererOptions.h>
 #include <LLUtils/Warnings.h>
 
 namespace OIV
@@ -19,6 +21,8 @@ namespace OIV
         }
 
         ID3D11Device* GetdDevice() const { return fD3dDevice.Get(); }
+
+        int GetSelectedGPUIndex() const { return fGpuIndex; }
 
         IDXGIAdapter* GetAdapter() const { return fD3dAdapter.Get(); }
 
@@ -40,7 +44,7 @@ namespace OIV
 
         IDXGISwapChain* GetSwapChain() const { return fD3dSwapChain.Get(); }
 
-        void Create(HWND hwnd)
+        void Create(HWND hwnd, int adapterIndex, const char* adapterName)
         {
             fHWND                               = hwnd;
             D3D_FEATURE_LEVEL requestedLevels[] = {D3D_FEATURE_LEVEL_11_0};
@@ -52,20 +56,49 @@ namespace OIV
             createFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+            ComPtr<IDXGIAdapter1> selected;
+            if (adapterIndex >= 0 || adapterName != nullptr)
+            {
+                ComPtr<IDXGIFactory1> factory;
+                D3D11Error::HandleDeviceError(CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf())),
+                                              "Could not enumerate D3D11 adapters");
+                for (UINT index = 0;; ++index)
+                {
+                    ComPtr<IDXGIAdapter1> adapter;
+                    const HRESULT enumeration = factory->EnumAdapters1(index, adapter.GetAddressOf());
+                    if (enumeration == DXGI_ERROR_NOT_FOUND)
+                        break;
+                    D3D11Error::HandleDeviceError(enumeration, "Could not enumerate D3D11 adapters");
+                    bool matches = adapterIndex >= 0 && index == static_cast<UINT>(adapterIndex);
+                    if (adapterName != nullptr)
+                    {
+                        DXGI_ADAPTER_DESC1 desc{};
+                        D3D11Error::HandleDeviceError(adapter->GetDesc1(&desc), "Could not read adapter name");
+                        const std::wstring_view description(desc.Description);
+                        const int size = WideCharToMultiByte(CP_UTF8, 0, description.data(),
+                                                             static_cast<int>(description.size()), nullptr, 0, nullptr,
+                                                             nullptr);
+                        std::string name(static_cast<size_t>(size), '\0');
+                        WideCharToMultiByte(CP_UTF8, 0, description.data(), static_cast<int>(description.size()),
+                                            name.data(), size, nullptr, nullptr);
+                        matches = detail::AdapterNameMatches(adapterName, name);
+                    }
+                    if (matches)
+                    {
+                        selected  = std::move(adapter);
+                        fGpuIndex = static_cast<int>(index);
+                        break;
+                    }
+                }
+                if (selected == nullptr)
+                    throw std::invalid_argument("Requested D3D11 adapter was not found");
+            }
+            HRESULT res = D3D11CreateDevice(selected.Get(),
+                                            selected != nullptr ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE,
+                                            nullptr, createFlags, requestedLevels, 1, D3D11_SDK_VERSION,
+                                            fD3dDevice.GetAddressOf(), nullptr, fD3dContext.GetAddressOf());
 
-            HRESULT res = D3D11CreateDevice(
-                nullptr
-                , D3D_DRIVER_TYPE_HARDWARE
-                , nullptr
-                , createFlags
-                , requestedLevels
-                , sizeof(requestedLevels) / sizeof(D3D_FEATURE_LEVEL)
-                , D3D11_SDK_VERSION
-                , fD3dDevice.GetAddressOf()
-                , nullptr
-                , fD3dContext.GetAddressOf());
-
-            if (FAILED(res))
+            if (FAILED(res) && selected == nullptr)
             {
                 res = D3D11CreateDevice(
                     nullptr
@@ -80,6 +113,8 @@ namespace OIV
                     , fD3dContext.GetAddressOf());
             }
 
+            if (FAILED(res) && selected != nullptr)
+                throw std::runtime_error("The requested adapter cannot create a Direct3D 11 device");
             if (FAILED(res))
                 D3D11Error::HandleDeviceError(res, "Could not create D3D11 device");
                 
@@ -141,6 +176,7 @@ LLUTILS_DISABLE_WARNING_POP
 
     private:
         HWND fHWND = nullptr;
+        int fGpuIndex = -1;
         ComPtr<IDXGISwapChain1> fD3dSwapChain;
         ComPtr<ID3D11DeviceContext> fD3dContext;
         ComPtr<ID3D11Device> fD3dDevice;

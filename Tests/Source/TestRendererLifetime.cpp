@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include "ViewerRenderPort.h"
 #include "ApiGlobal.h"
@@ -14,11 +15,7 @@ namespace
         std::unique_ptr<OIV::IPictureRenderer> previous = std::move(OIV::ApiGlobal::sPictureRenderer);
 
         ScopedApi() { OIV::ApiGlobal::sPictureRenderer = std::make_unique<OIV::OIV>(); }
-        ~ScopedApi()
-        {
-            OIV::ApiGlobal::sPictureRenderer = std::move(previous);
-            OIV::OIV::SetPreferredRenderer("");
-        }
+        ~ScopedApi() { OIV::ApiGlobal::sPictureRenderer = std::move(previous); }
     };
 }  // namespace
 
@@ -26,15 +23,16 @@ TEST_CASE("Render gateway releases the API after images on success or initializa
 {
     ScopedApi api;
     const bool fail = GENERATE(false, true);
-    OIV::OIV::SetPreferredRenderer(fail ? "unknown-backend" : "null");
+    const OIV::RendererOptions options{.renderer = fail ? static_cast<OIV::RendererType>(-1) : OIV::RendererType::Null};
     {
         OIV::OivRenderGateway gateway;
         OIV::OIVBaseImage image(OIV::ImageSource::GeneratedByLib);
         if (fail)
-            REQUIRE_THROWS_AS(gateway.Initialize(0), LLUtils::Exception);
+            REQUIRE_THROWS_WITH(gateway.Initialize(0, nullptr, options),
+                                Catch::Matchers::ContainsSubstring("not available"));
         else
         {
-            REQUIRE_NOTHROW(gateway.Initialize(0));
+            REQUIRE_NOTHROW(gateway.Initialize(0, nullptr, options));
             REQUIRE(std::string(OIV::ApiGlobal::sPictureRenderer->GetRenderer()->GetBackendName()) == "Null");
         }
         // The image's destructor needs the API, so it runs before the gateway releases it.
@@ -55,11 +53,11 @@ TEST_CASE("Unused render gateway leaves the API available", "[renderer][lifetime
 TEST_CASE("Renderer shutdown disconnects its global exception subscription", "[renderer][lifetime]")
 {
     ScopedApi api;
-    OIV::OIV::SetPreferredRenderer("null");
+    const OIV::RendererOptions options{.renderer = OIV::RendererType::Null};
     int callbacks = 0;
     {
         OIV::OivRenderGateway gateway;
-        REQUIRE_NOTHROW(gateway.Initialize(0));
+        REQUIRE_NOTHROW(gateway.Initialize(0, nullptr, options));
         const OIV_CMD_RegisterCallbacks_Request callback{.OnException = [](OIV_Exception_Args, void* userPointer)
                                                          { ++*static_cast<int*>(userPointer); },
                                                          .userPointer = &callbacks};
@@ -74,9 +72,9 @@ TEST_CASE("Renderer shutdown disconnects its global exception subscription", "[r
 TEST_CASE("Render gateway forwards zero extents and restores the same viewport", "[renderer][lifetime]")
 {
     ScopedApi api;
-    OIV::OIV::SetPreferredRenderer("null");
+    const OIV::RendererOptions options{.renderer = OIV::RendererType::Null};
     OIV::OivRenderGateway gateway;
-    gateway.Initialize(0);
+    gateway.Initialize(0, nullptr, options);
     const auto& renderer = static_cast<const OIV::OIV&>(*OIV::ApiGlobal::sPictureRenderer);
 
     for (const auto size : {LWS::PixelSize{}, LWS::PixelSize{640, 480}, LWS::PixelSize{}, LWS::PixelSize{640, 480},

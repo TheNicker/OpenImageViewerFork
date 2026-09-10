@@ -1,41 +1,22 @@
-#include "ExceptionHandler.h"
 #include "Main.h"
-
-#include <LLUtils/Exception.h>
-
 #include <cstdlib>
-#include <exception>
-
-namespace
-{
-    class ExceptionRegistration final
-    {
-      public:
-
-        ExceptionRegistration() { OIV::RegisterExceptionhandler(); }
-        ~ExceptionRegistration() { OIV::RemoveExceptionHandler(); }
-    };
-}  // namespace
+#include <iostream>
 
 int main(int argc, char* argv[])
 {
-    const ExceptionRegistration exceptionRegistration;
     try
     {
-        return RunViewer(CompileFilePathFromArguments(argc, argv));
+        auto parsed       = OIV::ParseCommandLine(argc, argv);
+        const auto result = std::holds_alternative<OIV::CommandLineExit>(parsed)
+                                ? std::get<OIV::CommandLineExit>(std::move(parsed))
+                                : RunViewer(std::get<OIV::CommandLineParameters>(parsed));
+        std::cout << result.standardOutput;
+        std::cerr << result.standardError;
+        return result.exitCode;
     }
-    catch (const LLUtils::Exception&)
+    catch (const std::exception& error)
     {
-        return EXIT_FAILURE;
-    }
-    catch (const std::exception& exception)
-    {
-        LL_EXCEPTION_DONT_THROW(LLUtils::Exception::ErrorCode::BadParameters, exception.what());
-        return EXIT_FAILURE;
-    }
-    catch (...)
-    {
-        LL_EXCEPTION_DONT_THROW(LLUtils::Exception::ErrorCode::Unknown, "Unhandled entry-point exception");
+        std::cerr << "OIViewer: " << error.what() << '\n';
         return EXIT_FAILURE;
     }
 }

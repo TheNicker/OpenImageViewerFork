@@ -38,10 +38,7 @@ namespace OIV
         IRenderer* GetRenderer() override;
         ResultCode SetBackgroundColor(int index, LLUtils::Color backgroundColor) override;
 
-        static void SetPreferredRenderer(const char* name);
-        static void SetPreferredGPUIndex(int index);
-
-        int Init() override;
+        int Init(const RendererOptions& options = {}) override;
         int SetParent(std::size_t handle, void* nativeDisplay) override;
         int Refresh() override;
 
@@ -54,7 +51,7 @@ namespace OIV
 #pragma endregion
 
 #pragma region //-------------Private methods------------------
-        IRendererSharedPtr CreateBestRenderer();
+        IRendererSharedPtr CreateRenderer(RendererType renderer);
         bool IsImageDisplayed() const;
         void UpdateGpuParams();
         IMUtil::AxisAlignedRotation ResolveExifRotation(unsigned short exifRotation) const;
@@ -67,9 +64,6 @@ namespace OIV
 #pragma region //-------------Private member fields------------------
 
     private:
-
-        static std::string sPreferredRenderer;
-        static int sPreferredGPUIndex;
 
         static constexpr std::array<uint8_t, 6> sShades
         {

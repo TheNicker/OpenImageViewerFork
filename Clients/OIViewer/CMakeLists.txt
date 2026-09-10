@@ -101,6 +101,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 target_link_libraries(${TargetName} PRIVATE
+    CLI11::CLI11
     LLUtils::LLUtils
     ImageUtil
     oiv

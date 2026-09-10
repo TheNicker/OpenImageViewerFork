@@ -160,6 +160,9 @@ void main()
 
     int OIVGLRenderer::Init(const OIV_RendererInitializationParams& initParams)
     {
+        if (initParams.gpuIndex >= 0 || initParams.adapterName != nullptr)
+            throw std::invalid_argument(
+                "GL uses the platform-selected adapter; explicit adapter selection is unsupported");
         fContext.Init(initParams.container, initParams.nativeDisplay);
         glewExperimental      = GL_TRUE;
         const GLenum glewCode = glewInit();
