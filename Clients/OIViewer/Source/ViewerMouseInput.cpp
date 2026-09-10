@@ -148,12 +148,10 @@ namespace OIV
             ToggleAutoScroll();
     }
 
-    void ViewerMouseInput::Wheel(double steps)
+    void ViewerMouseInput::Wheel(double steps, bool mouseInside)
     {
         if (steps != 0.0 && !fController.IsRockerActive())
         {
-            auto& canvas             = fOwner.fWindow.GetCanvasWindow();
-            const bool mouseInside   = canvas.IsMouseInClientRect();
             const bool rightCaptured = fController.IsCaptured(LWS::MouseButton::Right);
             // Navigation intentionally reacts to every event by sign. High-resolution wheels can therefore trigger
             // multiple navigation commands while moving through one logical detent.
@@ -161,13 +159,12 @@ namespace OIV
                 fOwner.ExecutePredefinedCommand(steps > 0.0 ? "PreviousSubImage" : "NextSubImage");
             else if (mouseInside && fOwner.fPlatform.IsKeyPressed(LWS::KeyCode::Shift).value_or(false))
                 fOwner.ExecutePredefinedCommand(steps > 0.0 ? "PreviousImageInFolder" : "NextImageInFolder");
-            else if (rightCaptured || mouseInside)
+            else if (rightCaptured)
+                fOwner.Zoom(steps * ZoomAmountPerWheelStep);
+            else if (mouseInside)
             {
                 const auto position = fOwner.fWindow.GetCanvasMousePosition();
-                if (rightCaptured)
-                    fOwner.Zoom(steps * ZoomAmountPerWheelStep);
-                else
-                    fOwner.Zoom(steps * ZoomAmountPerWheelStep, position.x, position.y);
+                fOwner.Zoom(steps * ZoomAmountPerWheelStep, position.x, position.y);
             }
         }
     }

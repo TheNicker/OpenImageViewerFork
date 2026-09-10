@@ -21,7 +21,8 @@ namespace OIV
         void SetButton(LWS::MouseButton button, bool pressed, bool mouseInside);
         void Move(LWS::Point delta);
         // A value of 1.0 is one logical wheel detent (120 platform delta units).
-        void Wheel(double steps);
+        // mouseInside means the cursor is over the exposed canvas, not just within its bounds.
+        void Wheel(double steps, bool mouseInside);
         void Cancel();
         [[nodiscard]] int GetNavigationDirection() const;
 
