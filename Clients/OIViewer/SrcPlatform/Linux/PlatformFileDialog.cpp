@@ -125,6 +125,8 @@ namespace
         }
 
         g_object_unref(dialog);
+        // LWS runs the application's event loop, so GTK will not flush the dialog's unmap/destroy requests for us.
+        gdk_display_flush(gdk_display_get_default());
         return selection;
     }
 }  // namespace

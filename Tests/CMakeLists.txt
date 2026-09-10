@@ -27,7 +27,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_definitions(${TargetName} PRIVATE OIV_TEST_PLATFORM_LINUX)
+    if(NOT TARGET PkgConfig::GTK3)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+    endif()
+    pkg_check_modules(WaylandClient REQUIRED IMPORTED_TARGET wayland-client)
+    target_link_libraries(${TargetName} PRIVATE PkgConfig::GTK3 PkgConfig::WaylandClient)
     target_sources(${TargetName} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/PlatformFileDialog.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/ContextMenuBackend.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../Clients/OIViewer/SrcPlatform/Linux/LinuxKeyBindings.cpp
     )
