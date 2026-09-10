@@ -4,7 +4,7 @@
 
 #include <LLUtils/FileSystemHelper.h>
 #include <Windows.h>
-#include <shellapi.h>
+#include <array>
 #include <cstdlib>
 
 namespace
@@ -50,44 +50,30 @@ namespace
                 offset += written;
         }
     }
-
-    int PrintExit(const OIV::CommandLineExit& result)
-    {
-        if (!result.standardOutput.empty() || !result.standardError.empty())
-        {
-            // Attaching can replace standard handles. Preserve any pipes supplied by the caller.
-            HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
-            HANDLE err = GetStdHandle(STD_ERROR_HANDLE);
-            AttachConsole(ATTACH_PARENT_PROCESS);
-            if (out == nullptr || out == INVALID_HANDLE_VALUE)
-                out = GetStdHandle(STD_OUTPUT_HANDLE);
-            if (err == nullptr || err == INVALID_HANDLE_VALUE)
-                err = GetStdHandle(STD_ERROR_HANDLE);
-            WriteText(out, result.standardOutput);
-            WriteText(err, result.standardError);
-        }
-        return result.exitCode;
-    }
 }  // namespace
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
+int wmain(int argc, wchar_t* argv[])
 {
-    int count      = 0;
-    wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &count);
-    if (argv == nullptr)
-        return EXIT_FAILURE;
     OIV::CommandLineExit result;
     try
     {
-        auto parsed = OIV::ParseCommandLine(count, argv);
-        result      = std::holds_alternative<OIV::CommandLineExit>(parsed)
-                          ? std::get<OIV::CommandLineExit>(std::move(parsed))
-                          : RunViewer(std::get<OIV::CommandLineParameters>(parsed), ForwardFile);
+        auto parsed = OIV::ParseCommandLine(argc, argv);
+        if (auto* exit = std::get_if<OIV::CommandLineExit>(&parsed))
+            result = std::move(*exit);
+        else
+        {
+            // Keep an existing shell console; release one allocated solely for a desktop viewer launch.
+            std::array<DWORD, 2> consoleProcesses{};
+            if (GetConsoleProcessList(consoleProcesses.data(), static_cast<DWORD>(consoleProcesses.size())) == 1)
+                FreeConsole();
+            result = RunViewer(std::get<OIV::CommandLineParameters>(parsed), ForwardFile);
+        }
     }
     catch (const std::exception& error)
     {
         result = {EXIT_FAILURE, {}, std::string("OIViewer: ") + error.what() + "\n"};
     }
-    LocalFree(argv);
-    return PrintExit(result);
+    WriteText(GetStdHandle(STD_OUTPUT_HANDLE), result.standardOutput);
+    WriteText(GetStdHandle(STD_ERROR_HANDLE), result.standardError);
+    return result.exitCode;
 }

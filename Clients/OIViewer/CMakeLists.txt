@@ -46,7 +46,10 @@ endif()
 target_compile_definitions(${TargetName} PRIVATE OIV_GIT_SHORT_HASH="${OIV_GIT_SHORT_HASH}")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set_target_properties(${TargetName} PROPERTIES WIN32_EXECUTABLE TRUE)
+    # On Windows, FALSE makes CMake generate /SUBSYSTEM:CONSOLE for MSVC-style linkers.
+    # An explicit /SUBSYSTEM:CONSOLE would duplicate that generated flag.
+    # Console startup lets interactive shells wait for CLI output before displaying the next prompt.
+    set_target_properties(${TargetName} PROPERTIES WIN32_EXECUTABLE FALSE)
     set(OIVIEWER_RESOURCE_FILE "${OIVIEWER_PLATFORM_DIR}/Resource.rc")
 endif()
 
@@ -64,7 +67,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT MINGW)
         COMMENT "Compiling resources"
     )
     if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
-        target_link_options(${TargetName} PRIVATE "/SUBSYSTEM:WINDOWS" "/MANIFEST:NO")
+        target_link_options(${TargetName} PRIVATE "/ENTRY:wmainCRTStartup" "/MANIFEST:NO")
     endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     add_custom_command(TARGET ${TargetName}
@@ -80,7 +83,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Compiling resources"
     )
-    target_link_options(${TargetName} PRIVATE "-mwindows" "-municode")
+    target_link_options(${TargetName} PRIVATE "-mconsole" "-municode")
 endif()
 
 target_include_directories(${TargetName} PRIVATE
