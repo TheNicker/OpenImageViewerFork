@@ -1,16 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
 
-# Headers are target-independent; the shader compiler must run on the build host.
-find_path(OIV_VULKAN_INCLUDE_DIR vulkan/vulkan.h HINTS "$ENV{VULKAN_SDK}" PATH_SUFFIXES Include include)
-find_program(OIV_GLSLC glslc HINTS "$ENV{VULKAN_SDK}" PATH_SUFFIXES Bin bin NO_CMAKE_FIND_ROOT_PATH)
-if(NOT OIV_VULKAN_INCLUDE_DIR OR NOT EXISTS "${OIV_VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" OR NOT OIV_GLSLC)
-    message(FATAL_ERROR "Vulkan requires SDK headers and a host glslc. Set VULKAN_SDK/OIV_VULKAN_INCLUDE_DIR/OIV_GLSLC or disable OIV_BUILD_RENDERER_VK.")
-endif()
-execute_process(COMMAND "${OIV_GLSLC}" --version RESULT_VARIABLE glslcResult OUTPUT_QUIET ERROR_QUIET TIMEOUT 10)
-if(NOT glslcResult EQUAL 0)
-    message(FATAL_ERROR "OIV_GLSLC must run on the build host. Choose a host glslc or set OIV_BUILD_RENDERER_VK=OFF.")
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/VulkanSDK.cmake")
 if(NOT WIN32)
+    # Keep the selected headers while resolving the loader through the target toolchain.
+    set(Vulkan_INCLUDE_DIR "${OIV_VULKAN_INCLUDE_DIR}")
+    set(Vulkan_GLSLC_EXECUTABLE "${OIV_GLSLC}")
     find_package(Vulkan QUIET GLOBAL)
     if(NOT Vulkan_FOUND)
         message(FATAL_ERROR "Vulkan target libraries are missing. Install the Vulkan development package or set OIV_BUILD_RENDERER_VK=OFF.")
