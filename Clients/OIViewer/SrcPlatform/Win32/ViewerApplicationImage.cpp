@@ -78,6 +78,8 @@ namespace OIV
             LoadOivImage(std::make_shared<OIVBaseImage>(ImageSource::Clipboard, image));
             clipboardType = ClipboardDataType::Image;
         }
+        // Windows synthesizes CF_UNICODETEXT from CF_TEXT/CF_OEMTEXT, so legacy text is supported here.
+        // https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#synthesized-clipboard-formats
         // Clipboard buffers are untrusted: require whole UTF-16 units and a terminator inside the buffer.
         else if (formatType == CF_UNICODETEXT && buffer.size() >= sizeof(wchar_t) &&
                  buffer.size() % sizeof(wchar_t) == 0)
