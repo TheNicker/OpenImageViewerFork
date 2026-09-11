@@ -464,10 +464,7 @@ namespace OIV
     void ViewerApplication::UpdateWindowSize()
     {
         const auto clientArea     = fWindow.GetCanvasWindow().GetClientAreaSize();
-        const LWS::PixelSize size = fWindow.GetWindow().GetShowState() == LWS::WindowShowState::Minimized
-                                        ? LWS::PixelSize{}
-                                        : clientArea.value_or(LWS::ClientAreaSize{}).pixels;
-        // Keep zero extents visible to the renderer while placement retains the last usable dimensions.
+        const LWS::PixelSize size = clientArea.value_or(LWS::ClientAreaSize{}).pixels;
         fRenderGateway->SetViewportSize(size);
         if (size.x > 0 && size.y > 0)
         {
