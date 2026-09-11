@@ -5,7 +5,6 @@
 #include <exif.h>
 
 #include <ImageUtil/ImageUtil.h>
-#include "Configuration.h"
 #include "FreeTypeHelper.h"
 #include <Functions.h>
 #include <Version.h>

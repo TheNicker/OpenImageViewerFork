@@ -1,5 +1,4 @@
 #include "RendererSelection.h"
-#include "Configuration.h"
 #if OIV_BUILD_RENDERER_VK
     #include <OIVVKRendererFactory.h>
 #endif
