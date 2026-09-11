@@ -3,6 +3,9 @@ name: Build Windows
 on:
   workflow_call:
 
+env:
+  VULKAN_SDK: ''
+
 jobs:
   build-linux-mingw64:
     runs-on: ubuntu-latest
@@ -25,11 +28,11 @@ jobs:
     - name: Trust checkout directory
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-    - name: Install host Vulkan shader tools and stage target headers
-      run: |
-        pacman -Syu --noconfirm --needed shaderc vulkan-headers
-        mkdir -p "$BUILD_DIR/vulkan-headers/include"
-        cp -R /usr/include/vulkan /usr/include/vk_video "$BUILD_DIR/vulkan-headers/include/"
+    - name: Cache Vulkan SDK
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.BUILD_DIR }}/_deps/vulkan-sdk
+        key: vulkan-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('OIVLib/Renderers/OIVVKRenderer/VulkanSDK.cmake') }}
 
     - name: Configure CMake
       run: >
@@ -41,8 +44,6 @@ jobs:
         -DIMCODEC_BUILD_CODEC_WEBP=OFF
         -DFREETYPE_WRAPPER_BUILD_FRIBIDI=OFF
         -DMINGW_POST_BUILD_DONT_COPY_BINARIES=ON
-        -DOIV_VULKAN_INCLUDE_DIR="$BUILD_DIR/vulkan-headers/include"
-        -DOIV_GLSLC=/usr/bin/glslc
 
     - name: Build
       run: cmake --build "$BUILD_DIR" -- -j$(nproc)
@@ -58,13 +59,11 @@ jobs:
         fetch-depth: 1
         submodules: recursive
 
-    - name: Install Vulkan build dependencies
-      shell: pwsh
-      run: |
-        choco install vulkan-sdk --yes --no-progress
-        if ($LASTEXITCODE -ne 0) { throw "Vulkan SDK installation failed" }
-        $sdk = Get-ChildItem C:/VulkanSDK -Directory | Sort-Object Name -Descending | Select-Object -First 1
-        "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
+    - name: Cache Vulkan SDK
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.BUILD_DIR }}/_deps/vulkan-sdk
+        key: vulkan-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('OIVLib/Renderers/OIVVKRenderer/VulkanSDK.cmake') }}
 
     - name: Activate the Visual Studio development environment
       uses: ilammy/msvc-dev-cmd@v1
