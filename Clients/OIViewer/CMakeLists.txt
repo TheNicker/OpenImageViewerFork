@@ -46,11 +46,12 @@ endif()
 target_compile_definitions(${TargetName} PRIVATE OIV_GIT_SHORT_HASH="${OIV_GIT_SHORT_HASH}")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    # On Windows, FALSE makes CMake generate /SUBSYSTEM:CONSOLE for MSVC-style linkers.
-    # An explicit /SUBSYSTEM:CONSOLE would duplicate that generated flag.
-    # Console startup lets interactive shells wait for CLI output before displaying the next prompt.
+    # The console subsystem makes shells wait. The embedded detached-console policy
+    # prevents Explorer launches from allocating a console on Windows 11 24H2 and newer.
     set_target_properties(${TargetName} PROPERTIES WIN32_EXECUTABLE FALSE)
     set(OIVIEWER_RESOURCE_FILE "${OIVIEWER_PLATFORM_DIR}/Resource.rc")
+    set_property(TARGET ${TargetName} APPEND PROPERTY LINK_DEPENDS
+        "${OIVIEWER_RESOURCE_FILE}" "${OIVIEWER_PLATFORM_DIR}/OIViewerManifest.xml")
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows" AND NOT MINGW)

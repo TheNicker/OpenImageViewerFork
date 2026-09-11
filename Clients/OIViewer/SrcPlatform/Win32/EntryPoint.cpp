@@ -4,7 +4,6 @@
 
 #include <LLUtils/FileSystemHelper.h>
 #include <Windows.h>
-#include <array>
 #include <cstdlib>
 
 namespace
@@ -52,6 +51,8 @@ namespace
     }
 }  // namespace
 
+// The manifest keeps desktop launches detached while terminal launches inherit their
+// console and redirected streams. No runtime console allocation or attachment is needed.
 int wmain(int argc, wchar_t* argv[])
 {
     OIV::CommandLineExit result;
@@ -61,13 +62,7 @@ int wmain(int argc, wchar_t* argv[])
         if (auto* exit = std::get_if<OIV::CommandLineExit>(&parsed))
             result = std::move(*exit);
         else
-        {
-            // Keep an existing shell console; release one allocated solely for a desktop viewer launch.
-            std::array<DWORD, 2> consoleProcesses{};
-            if (GetConsoleProcessList(consoleProcesses.data(), static_cast<DWORD>(consoleProcesses.size())) == 1)
-                FreeConsole();
             result = RunViewer(std::get<OIV::CommandLineParameters>(parsed), ForwardFile);
-        }
     }
     catch (const std::exception& error)
     {
