@@ -2,6 +2,7 @@
 
 #include <LLUtils/StringDefs.h>
 #include <OIVImage/OIVBaseImage.h>
+#include <string_view>
 
 namespace IMCodec
 {
@@ -10,6 +11,18 @@ namespace IMCodec
 
 namespace OIV
 {
+    class IRenderer;
+
+    // UTF-8 metadata and renderer are borrowed for the duration of CreateSystemInfoMessage.
+    struct SystemInfoContext
+    {
+        std::string_view appName;
+        std::string_view appVersion;
+        std::string_view gitHash;
+        std::string_view buildType;
+        const IRenderer* renderer = nullptr;
+    };
+
     class MessageHelper
     {
       public:
@@ -18,13 +31,8 @@ namespace OIV
                                                                   const OIVBaseImageSharedPtr& rasterized,
                                                                   IMCodec::ImageCodec& imageCodec);
         static LLUtils::native_string_type CreateKeyBindingsMessage();
-        static LLUtils::native_string_type CreateSystemInfoMessage(
-            const LLUtils::native_string_type& appName, const LLUtils::native_string_type& appVersion,
-            const LLUtils::native_string_type& gitHash, const LLUtils::native_string_type& buildType,
-            const LLUtils::native_string_type& backendName, const LLUtils::native_string_type& gpuName,
-            int adapterIndex, const LLUtils::native_string_type& acceleration,
-            const LLUtils::native_string_type& apiVersion, const LLUtils::native_string_type& driverVersion,
-            const LLUtils::native_string_type& osName, const LLUtils::native_string_type& cpuCores);
+        // Collect system and renderer details on the renderer's owning thread, then format the overlay.
+        static LLUtils::native_string_type CreateSystemInfoMessage(const SystemInfoContext& context);
         static LLUtils::native_string_type GetFileTime(const LLUtils::native_string_type& filePath);
     };
 }  // namespace OIV

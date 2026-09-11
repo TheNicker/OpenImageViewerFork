@@ -4,13 +4,15 @@
 #include <OIVAppCore/ConfigurationLoader.h>
 #include <ImageCodec.h>
 
-#include <Version.h>
+#include <Interfaces/IRenderer.h>
+#include <LLUtils/PlatformUtility.h>
 
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 #include <fstream>
-#include <sstream>
+#include <format>
+#include <array>
+#include <memory>
 
 namespace OIV
 {
@@ -88,14 +90,66 @@ namespace OIV
         return message;
     }
 
-    LLUtils::native_string_type MessageHelper::CreateSystemInfoMessage(
-        const LLUtils::native_string_type& appName, const LLUtils::native_string_type& appVersion,
-        const LLUtils::native_string_type& gitHash, const LLUtils::native_string_type& buildType,
-        const LLUtils::native_string_type& backendName, const LLUtils::native_string_type& gpuName, int adapterIndex,
-        const LLUtils::native_string_type& acceleration, const LLUtils::native_string_type& apiVersion,
-        const LLUtils::native_string_type& driverVersion, const LLUtils::native_string_type& osName,
-        const LLUtils::native_string_type& cpuCores)
+    LLUtils::native_string_type MessageHelper::CreateSystemInfoMessage(const SystemInfoContext& context)
     {
+        std::string osName;
+#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
+        try
+        {
+            LLUtils::PlatformUtility::OSVersion ver = LLUtils::PlatformUtility::GetOSVersion();
+            osName                                  = std::format("Windows {}.{}.{}", ver.major, ver.minor, ver.build);
+        }
+        catch (...)
+        {
+            osName = "Windows";
+        }
+#else
+        {
+            std::ifstream osRelease("/etc/os-release");
+            if (osRelease.is_open())
+            {
+                std::string line;
+                while (std::getline(osRelease, line))
+                {
+                    if (line.starts_with("PRETTY_NAME="))
+                    {
+                        std::string prettyName = line.substr(12);
+                        if (!prettyName.empty() && prettyName.front() == '"' && prettyName.back() == '"')
+                            prettyName = prettyName.substr(1, prettyName.size() - 2);
+                        else if (!prettyName.empty() && prettyName.front() == '\'')
+                            prettyName = prettyName.substr(1, prettyName.size() - 2);
+                        osName = std::move(prettyName);
+                        break;
+                    }
+                }
+            }
+            if (osName.empty())
+            {
+                std::array<char, 128> buffer;
+                std::string result;
+                std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("uname -srmo", "r"), pclose);
+                if (pipe)
+                {
+                    while (!feof(pipe.get()))
+                    {
+                        if (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+                            result += buffer.data();
+                    }
+                    result = LLUtils::StringUtility::rtrim(result, "\n");
+                    osName = std::move(result);
+                }
+            }
+            if (osName.empty())
+                osName = "Linux";
+        }
+#endif
+
+        const auto coresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
+        const auto cpuCores  = std::format("{} physical / {} logical", coresInfo.physicalCores, coresInfo.logicalCores);
+        const auto* renderer = context.renderer;
+        const int adapterIndex = renderer ? renderer->GetSelectedGPUIndex() : -1;
+        const auto indexText   = adapterIndex < 0 ? std::string{} : std::to_string(adapterIndex);
+
         LLUtils::native_string_type message = MessageFormatter::DefaultHeaderColor +
                                               LLUTILS_TEXT("System information\n");
 
@@ -108,27 +162,24 @@ namespace OIV
         args.spaceBetweenColumns                        = 3;
         MessageFormatter::MessagesValues& messageValues = args.messageValues;
 
-        const auto indexText = adapterIndex < 0 ? LLUtils::native_string_type{}
-                                                : LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
-                                                      std::to_string(adapterIndex));
         // One value per labeled row: the formatter's columns concatenate within a row.
-        for (const auto& [label, value] :
-             std::initializer_list<std::pair<const char*, const LLUtils::native_string_type*>>{
-                 {"Application", &appName},
-                 {"Version", &appVersion},
-                 {"Build", &buildType},
-                 {"Commit", &gitHash},
-                 {"Operating system", &osName},
-                 {"CPU cores", &cpuCores},
-                 {"Renderer", &backendName},
-                 {"Adapter", &gpuName},
-                 {"Adapter index", &indexText},
-                 {"Acceleration", &acceleration},
-                 {"API version", &apiVersion},
-                 {"Driver version", &driverVersion}})
+        for (const auto& [label, value] : std::initializer_list<std::pair<const char*, std::string_view>>{
+                 {"Application", context.appName},
+                 {"Version", context.appVersion},
+                 {"Build", context.buildType},
+                 {"Commit", context.gitHash},
+                 {"Operating system", osName},
+                 {"CPU cores", cpuCores},
+                 {"Renderer", renderer ? renderer->GetBackendName() : "Unknown"},
+                 {"Adapter", renderer ? renderer->GetGPUName() : "Unknown"},
+                 {"Adapter index", indexText},
+                 {"Acceleration", GetAccelerationName(renderer ? renderer->GetAcceleration() : Acceleration::Unknown)},
+                 {"API version", renderer ? renderer->GetAPIVersion() : "Unknown"},
+                 {"Driver version", renderer ? renderer->GetDriverVersion() : "Unknown"}})
         {
             messageValues.emplace_back(label, MessageFormatter::ValueObjectList{MessageFormatter::ValueObject(
-                                                  value->empty() ? LLUTILS_TEXT("Not reported") : *value)});
+                                                  LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
+                                                      value.empty() ? std::string_view{"Not reported"} : value))});
         }
 
         message += LLUTILS_TEXT('\n');

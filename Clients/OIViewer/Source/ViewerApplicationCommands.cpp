@@ -15,7 +15,6 @@
 
 #include <LLUtils/Exception.h>
 #include <LLUtils/FileHelper.h>
-#include <LLUtils/PlatformUtility.h>
 #include <LLUtils/UniqueIDProvider.h>
 #include <LLUtils/FileSystemHelper.h>
 #include <LLUtils/Rect.h>
@@ -301,90 +300,19 @@ namespace OIV
 
         text = fLabelManager.GetOrCreateTextLabel("systemInfo");
 
-        IRenderer* renderer       = OIV::ApiGlobal::sPictureRenderer->GetRenderer();
-        const char* backendName   = renderer ? renderer->GetBackendName() : "Unknown";
-        const char* gpuName       = renderer ? renderer->GetGPUName() : "Unknown";
-        const char* apiVersion    = renderer ? renderer->GetAPIVersion() : "Unknown";
-        const char* driverVersion = renderer ? renderer->GetDriverVersion() : "Unknown";
-
-        LLUtils::native_string_type osName;
-#if LLUTILS_PLATFORM == LLUTILS_PLATFORM_WIN32
-        try
-        {
-            LLUtils::PlatformUtility::OSVersion ver = LLUtils::PlatformUtility::GetOSVersion();
-            std::ostringstream oss;
-            oss << "Windows " << ver.major << "." << ver.minor << "." << ver.build;
-            osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(oss.str());
-        }
-        catch (...)
-        {
-            osName = LLUTILS_TEXT("Windows");
-        }
-#else
-        {
-            std::ifstream osRelease("/etc/os-release");
-            if (osRelease.is_open())
-            {
-                std::string line;
-                while (std::getline(osRelease, line))
-                {
-                    if (line.starts_with("PRETTY_NAME="))
-                    {
-                        std::string prettyName = line.substr(12);
-                        if (!prettyName.empty() && prettyName.front() == '"' && prettyName.back() == '"')
-                            prettyName = prettyName.substr(1, prettyName.size() - 2);
-                        else if (!prettyName.empty() && prettyName.front() == '\'')
-                            prettyName = prettyName.substr(1, prettyName.size() - 2);
-                        osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(prettyName);
-                        break;
-                    }
-                }
-            }
-            if (osName.empty())
-            {
-                std::array<char, 128> buffer;
-                std::string result;
-                std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("uname -srmo", "r"), pclose);
-                if (pipe)
-                {
-                    while (!feof(pipe.get()))
-                    {
-                        if (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
-                            result += buffer.data();
-                    }
-                    result = LLUtils::StringUtility::rtrim(result, "\n");
-                    osName = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(result);
-                }
-            }
-            if (osName.empty())
-                osName = LLUTILS_TEXT("Linux");
-        }
-#endif
-
-        auto coresInfo = LLUtils::PlatformUtility::GetCPUCoresInfo();
-        std::ostringstream coresOss;
-        coresOss << coresInfo.physicalCores << " physical / " << coresInfo.logicalCores << " logical";
-        LLUtils::native_string_type cpuCores = LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
-            coresOss.str());
-
 #if defined(NDEBUG)
-        LLUtils::native_string_type buildType = LLUTILS_TEXT("Release");
+        constexpr std::string_view buildType = "Release";
 #else
-        LLUtils::native_string_type buildType = LLUTILS_TEXT("Debug");
+        constexpr std::string_view buildType = "Debug";
 #endif
 
-        auto message = MessageHelper::CreateSystemInfoMessage(
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string("OpenImageViewer")),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
-                OIV::FormatFullVersion(OIV::CurrentVersion)),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(std::string(OIV_GIT_SHORT_HASH)),
-            buildType, LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(backendName),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(gpuName),
-            renderer ? renderer->GetSelectedGPUIndex() : -1,
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(
-                std::string(GetAccelerationName(renderer ? renderer->GetAcceleration() : Acceleration::Unknown))),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(apiVersion),
-            LLUtils::StringUtility::ConvertString<LLUtils::native_string_type>(driverVersion), osName, cpuCores);
+        auto message = MessageHelper::CreateSystemInfoMessage({
+            .appName    = "OpenImageViewer",
+            .appVersion = OIV::FormatFullVersion(OIV::CurrentVersion),
+            .gitHash    = OIV_GIT_SHORT_HASH,
+            .buildType  = buildType,
+            .renderer   = OIV::ApiGlobal::sPictureRenderer->GetRenderer(),
+        });
 
         text->SetText(message);
         text->SetBackgroundColor({0, 0, 0, 216});
