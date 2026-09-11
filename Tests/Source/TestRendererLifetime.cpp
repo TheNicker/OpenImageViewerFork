@@ -12,9 +12,19 @@
 #include <future>
 #include <array>
 #include <iterator>
+#include <type_traits>
 
 namespace
 {
+    static_assert(!std::is_copy_constructible_v<OIV::OIV>);
+    static_assert(!std::is_copy_assignable_v<OIV::OIV>);
+    static_assert(!std::is_move_constructible_v<OIV::OIV>);
+    static_assert(!std::is_move_assignable_v<OIV::OIV>);
+    static_assert(!std::is_copy_constructible_v<OIV::OIVBaseImage>);
+    static_assert(!std::is_copy_assignable_v<OIV::OIVBaseImage>);
+    static_assert(!std::is_move_constructible_v<OIV::OIVBaseImage>);
+    static_assert(!std::is_move_assignable_v<OIV::OIVBaseImage>);
+
     // Each test owns its API instance without disturbing the suite's other image tests.
     struct ScopedApi
     {

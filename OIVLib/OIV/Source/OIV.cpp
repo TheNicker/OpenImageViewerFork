@@ -13,7 +13,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
-#include <mutex>
 #include <stdexcept>
 
 #include "RendererSelection.h"
@@ -308,9 +307,11 @@ namespace OIV
         return ResultCode::RC_Success;
     }
 
+    // Registration and initialization share the renderer's owner thread. Background work
+    // passes decoded image data instead of OIV wrappers. Keep pre-init registrations queued
+    // for callers that construct renderables before initializing the renderer.
     ResultCode OIV::AddRenderable(IRenderable* renderable)
     {
-        std::lock_guard<std::mutex> lock(fMutex);
         if (fIsInitialized)
             fRenderer->AddRenderable(renderable);
         else
@@ -320,7 +321,6 @@ namespace OIV
     }
     ResultCode OIV::RemoveRenderable(IRenderable* renderable)
     {
-        std::lock_guard<std::mutex> lock(fMutex);
         if (fIsInitialized)
             fRenderer->RemoveRenderable(renderable);
         else
@@ -491,13 +491,10 @@ namespace OIV
                 }
             });
 
-        {
-            std::lock_guard<std::mutex> lock(fMutex);
-            for (const auto renderable : fPendingRenderables)
-                fRenderer->AddRenderable(renderable);
-            fPendingRenderables.clear();
-            fIsInitialized = true;
-        }
+        for (const auto renderable : fPendingRenderables)
+            fRenderer->AddRenderable(renderable);
+        fPendingRenderables.clear();
+        fIsInitialized = true;
         return 0;
     }
 

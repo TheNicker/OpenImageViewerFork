@@ -3,7 +3,6 @@
 #include <Interfaces/IRenderer.h>
 #include "ImageManager.h"
 #include "Resampler.h"
-#include <mutex>
 #include <LLUtils/Exception.h>
 #include <set>
 #include <ImageUtil/AxisAlignedTransform.h>
@@ -13,10 +12,14 @@ namespace OIV
 {
     class OIV  : public IPictureRenderer
     {
+      public:
 
+        // Exception callbacks capture this instance, so its address must remain stable.
+        OIV()                      = default;
+        OIV(const OIV&)            = delete;
+        OIV& operator=(const OIV&) = delete;
 
-        public:
-#pragma region //-------------IPictureListener implementation------------------
+#pragma region  //-------------IPictureListener implementation------------------
         ResultCode UnloadFile(const ImageHandle handle) override;
         ResultCode LoadFile(void* buffer, std::size_t size, char* extension , OIV_CMD_LoadFile_Flags flags, ImageHandle& handle) override;
         ResultCode LoadRaw(const OIV_CMD_LoadRaw_Request& loadRawRequest, int16_t& handle) override;
@@ -106,7 +109,6 @@ namespace OIV
         OIV_CMD_RegisterCallbacks_Request fCallBacks = {};
         Resampler fResampler;
         std::vector<IRenderable*> fPendingRenderables;
-        std::mutex fMutex;
         bool fIsInitialized = false;
         LLUtils::Exception::OnExceptionEventType::Connection fExceptionConnection;
 #pragma endregion
