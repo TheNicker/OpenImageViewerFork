@@ -81,21 +81,23 @@ namespace OIV
         if (isDirectory)
             fPendingFolderLoad = filePath;
 
-        future<bool> asyncResult;
+        // Declare metadata before the future so the worker finishes before it is destroyed
+        // during unwinding. The UI thread reads it only after future::get completes.
+        IMCodec::ItemMetaDataSharedPtr initialMetaData;
+        future<IMCodec::ImageSharedPtr> asyncResult;
 
         if (isInitialFileExists == true)
         {
             fIsTryToLoadInitialFile = true;
 
-            // if initial file is provided, load asynchronously.
+            // Decode pixels and metadata while the UI thread initializes the renderer.
+            // No OIV wrapper is constructed on the worker.
             asyncResult = async(launch::async,
-                                [&]() -> bool
+                                [this, &filePath, &initialMetaData]()
                                 {
-                                    fInitialFile = std::make_shared<OIVFileImage>(filePath);
-                                    return fInitialFile->Load(&fImageLoader,
-                                                              IMCodec::PluginTraverseMode::AnyPlugin |
-                                                                  IMCodec::PluginTraverseMode::AnyFileType) ==
-                                           RC_Success;
+                                    return DecodeFileImage(fImageLoader, filePath, initialMetaData,
+                                                           IMCodec::PluginTraverseMode::AnyPlugin |
+                                                               IMCodec::PluginTraverseMode::AnyFileType);
                                 });
         }
 
@@ -212,13 +214,10 @@ namespace OIV
         UpdateWindowSize();
         fWindow.ShowCanvas();
 
-        // Wait for initial file to finish loading
-        bool isInitialFileLoadedSuccesfuly = false;
+        IMCodec::ImageSharedPtr initialImage;
         if (asyncResult.valid())
-        {
-            asyncResult.wait();
-            isInitialFileLoadedSuccesfuly = asyncResult.get();
-        }
+            initialImage = asyncResult.get();
+        const bool isInitialFileLoadedSuccesfuly = initialImage != nullptr;
 
         // If there is no initial file or the file has failed to load, show the window now, otherwise show the window
         // after the image has rendered completely at the method FinalizeImageLoad.
@@ -236,8 +235,10 @@ namespace OIV
 
         if (isInitialFileLoadedSuccesfuly)
         {
-            LoadOivImage(fInitialFile);
-            fInitialFile.reset();
+            // Registration happens here on the UI thread, after the renderer is ready.
+            auto file = std::make_shared<OIVFileImage>(filePath, std::move(initialImage));
+            file->SetMetaData(std::move(initialMetaData));
+            LoadOivImage(std::move(file));
         }
     }
 

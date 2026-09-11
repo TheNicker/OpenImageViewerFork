@@ -6,6 +6,12 @@
 #include "ApiGlobal.h"
 #include "OIV.h"
 #include <OIVImage/OIVBaseImage.h>
+#include <OIVImage/OIVFileImage.h>
+#include <filesystem>
+#include <fstream>
+#include <future>
+#include <array>
+#include <iterator>
 
 namespace
 {
@@ -83,4 +89,111 @@ TEST_CASE("Render gateway forwards zero extents and restores the same viewport",
         REQUIRE(gateway.SetViewportSize(size) == RC_Success);
         REQUIRE(renderer.GetClientSize() == LLUtils::PointI32{size.x, size.y});
     }
+}
+
+TEST_CASE("File decoding finishes without an OIV instance before renderer initialization",
+          "[renderer][lifetime][loading]")
+{
+    ScopedApi api;
+    OIV::ApiGlobal::sPictureRenderer.reset();
+    IMCodec::ImageLoader loader;
+    if (loader.GetFirstPlugin(LLUTILS_TEXT("jpg")) == IMCodec::PluginID{})
+        SKIP("JPEG decoding is not configured");
+    const auto fixture = std::filesystem::path(OIV_TEST_SOURCE_DIR).parent_path() /
+                         "External/ImageCodec/Example/cat.jpg";
+    IMCodec::ItemMetaDataSharedPtr metaData;
+    auto future = std::async(
+        std::launch::async, [&]
+        { return OIV::DecodeFileImage(loader, fixture.native(), metaData, IMCodec::PluginTraverseMode::NoTraverse); });
+    auto decoded = future.get();
+    REQUIRE(decoded != nullptr);
+    REQUIRE(metaData != nullptr);
+    REQUIRE(OIV::ApiGlobal::sPictureRenderer == nullptr);
+    const auto* pixels = decoded->GetBufferAt(0, 0);
+
+    OIV::ApiGlobal::sPictureRenderer = std::make_unique<OIV::OIV>();
+    OIV::OivRenderGateway gateway;
+    SECTION("Successful initialization wraps the existing pixels on the calling thread")
+    {
+        REQUIRE_NOTHROW(gateway.Initialize(0, nullptr, {.renderer = OIV::RendererType::Null}));
+        OIV::OIVFileImage image(fixture.native(), std::move(decoded));
+        image.SetMetaData(std::move(metaData));
+        CHECK(image.GetFileName() == fixture.native());
+        CHECK(image.GetImageSource() == OIV::ImageSource::File);
+        CHECK(image.GetImage()->GetBufferAt(0, 0) == pixels);
+    }
+    SECTION("Initialization failure leaves data safe to release without a renderer")
+    {
+        REQUIRE_THROWS(gateway.Initialize(0, nullptr, {.renderer = static_cast<OIV::RendererType>(-1)}));
+        OIV::ApiGlobal::sPictureRenderer.reset();
+        decoded.reset();
+        metaData.reset();
+        SUCCEED("Decoded data has no renderer registration to release");
+    }
+}
+
+TEST_CASE("Decoded file data preserves EXIF orientation and failed-load behavior", "[renderer][lifetime][loading]")
+{
+    ScopedApi api;
+    IMCodec::ImageLoader loader;
+    if (loader.GetFirstPlugin(LLUTILS_TEXT("jpg")) == IMCodec::PluginID{})
+        SKIP("JPEG decoding is not configured");
+    const auto fixture = std::filesystem::path(OIV_TEST_SOURCE_DIR).parent_path() /
+                         "External/ImageCodec/Example/cat.jpg";
+    IMCodec::ImageSharedPtr original;
+    REQUIRE(loader.Decode(fixture.native(), IMCodec::ImageLoadFlags::None, {}, IMCodec::PluginTraverseMode::NoTraverse,
+                          original) == IMCodec::ImageResult::Success);
+    REQUIRE(original != nullptr);
+
+    struct TemporaryDirectory
+    {
+        std::filesystem::path path = std::filesystem::temp_directory_path() /
+                                     ("oiv-decoded-image-" +
+                                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        TemporaryDirectory() { std::filesystem::create_directory(path); }
+        ~TemporaryDirectory()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    } temporary;
+    const auto oriented = temporary.path / "oriented.jpg";
+    // Change the fixture's existing big-endian EXIF orientation entry to 6 (90 degrees
+    // clockwise). Verify the entry first so a fixture replacement cannot silently weaken the test.
+    {
+        std::ifstream input(fixture, std::ios::binary);
+        std::string bytes(std::istreambuf_iterator<char>{input}, {});
+        const std::array<char, 12> orientationEntry{1, 0x12, 0, 3, 0, 0, 0, 1, 0, 1, 0, 0};
+        const auto entry = bytes.find(std::string_view(orientationEntry.data(), orientationEntry.size()));
+        REQUIRE(entry != std::string::npos);
+        bytes[entry + 9] = 6;
+        std::ofstream output(oriented, std::ios::binary);
+        output.write(bytes.data(), bytes.size());
+        REQUIRE(output.good());
+    }
+    IMCodec::ItemMetaDataSharedPtr metaData;
+    const auto decoded = OIV::DecodeFileImage(loader, oriented.native(), metaData,
+                                              IMCodec::PluginTraverseMode::NoTraverse);
+    REQUIRE(decoded != nullptr);
+    REQUIRE(metaData != nullptr);
+    CHECK(metaData->exifData.orientation == 6);
+    CHECK(decoded->GetWidth() == original->GetHeight());
+    CHECK(decoded->GetHeight() == original->GetWidth());
+
+    OIV::OIVFileImage file(oriented.native());
+    REQUIRE(file.Load(&loader, IMCodec::PluginTraverseMode::NoTraverse) == RC_Success);
+    CHECK(file.GetImage()->GetWidth() == decoded->GetWidth());
+    CHECK(file.GetMetaData()->exifData.orientation == metaData->exifData.orientation);
+
+    const auto unsupported = temporary.path / "unsupported.txt";
+    {
+        std::ofstream output(unsupported);
+        output << "not an image";
+    }
+    // Reusing the output must not retain metadata from the previous successful decode.
+    CHECK(OIV::DecodeFileImage(loader, unsupported.native(), metaData, IMCodec::PluginTraverseMode::NoTraverse) ==
+          nullptr);
+    CHECK(metaData == nullptr);
+    OIV::OIVFileImage failed(unsupported.native());
+    CHECK(failed.Load(&loader, IMCodec::PluginTraverseMode::NoTraverse) == RC_FileNotSupported);
 }

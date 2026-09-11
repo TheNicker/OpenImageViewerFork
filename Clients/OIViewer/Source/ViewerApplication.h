@@ -491,7 +491,6 @@ namespace OIV
         }
 
         std::unique_ptr<ContextMenu<int>> fNotificationContextMenu;
-        std::shared_ptr<OIVFileImage> fInitialFile;
 
         ApplicationLog mLogFile{GetLogFilePath(), true};
         // Disconnect after workers stop and before the log is destroyed.
